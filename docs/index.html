@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pourover Scale Web Flasher</title>
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module">
+  </script>
+</head>
+<body>
+  <h1>Pourover Scale Firmware Installer</h1>
+  <p>Plug in your ESP32-S3, then click Install.</p>
+
+  <esp-web-install-button manifest="manifest.json">
+    <button slot="activate">Install Firmware</button>
+  </esp-web-install-button>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "Pourover Scale",
+  "version": "v1.0",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "firmware/pourover-scale-v1.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
