@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PourBot Smart Pourover Scale</title>
+
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: rgba(23, 26, 33, 0.92);
+      --panel2: rgba(31, 36, 48, 0.82);
+      --text: #f4f1ea;
+      --muted: #a8a29a;
+      --accent: #fdba4b;
+      --accent2: #5eead4;
+      --green: #86efac;
+      --danger: #ef4444;
+      --border: rgba(255,255,255,0.11);
+      --shadow: 0 24px 70px rgba(0,0,0,0.38);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(253,186,75,0.22), transparent 34%),
+        radial-gradient(circle at 90% 25%, rgba(94,234,212,0.12), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(134,239,172,0.09), transparent 32%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    a { color: inherit; }
+
+    .page { width: 100%; max-width: 1180px; margin: 0 auto; }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: rgba(15,17,21,0.56);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 14px;
+      z-index: 10;
+    }
+
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 950; letter-spacing: -0.02em; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, var(--accent), #ff8f3c); color: #1b1204; box-shadow: 0 12px 30px rgba(253,186,75,0.25); }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 14px; font-weight: 700; }
+    .nav-links a { text-decoration: none; }
+    .nav-links a:hover { color: var(--accent); }
+
+    .hero { display: grid; grid-template-columns: 1.08fr 0.92fr; gap: 24px; align-items: stretch; }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.065), rgba(255,255,255,0.025));
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .main { padding: clamp(28px, 5vw, 46px); }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px;
+      background: rgba(253,186,75,0.12); border: 1px solid rgba(253,186,75,0.35); color: var(--accent);
+      font-weight: 850; font-size: 13px; letter-spacing: 0.02em;
+    }
+
+    h1 { font-size: clamp(44px, 7vw, 82px); line-height: 0.9; margin: 24px 0 18px; letter-spacing: -0.07em; }
+    h2 { font-size: clamp(28px, 4vw, 42px); line-height: 1.02; margin: 0 0 14px; letter-spacing: -0.045em; }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+
+    .subtitle { color: var(--muted); font-size: 18px; line-height: 1.62; max-width: 690px; margin: 0 0 28px; }
+    .highlight { color: var(--text); font-weight: 800; }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 24px; }
+    .button-link, button {
+      appearance: none; border: 0; border-radius: 18px; background: linear-gradient(135deg, var(--accent), #ff8f3c);
+      color: #1b1204; font-weight: 950; font-size: 16px; padding: 15px 20px; cursor: pointer;
+      box-shadow: 0 14px 35px rgba(253,186,75,0.28); transition: transform 0.15s ease, box-shadow 0.15s ease;
+      width: 100%; text-decoration: none; display: inline-flex; justify-content: center; align-items: center; text-align: center;
+    }
+    .button-link.secondary { background: rgba(255,255,255,0.07); color: var(--text); border: 1px solid var(--border); box-shadow: none; }
+    button:hover, .button-link:hover { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(253,186,75,0.36); }
+    .button-link.secondary:hover { box-shadow: 0 18px 44px rgba(0,0,0,0.18); }
+
+    .side { padding: 28px; display: flex; flex-direction: column; gap: 18px; }
+    .device { flex: 1; min-height: 310px; border-radius: 26px; background: radial-gradient(circle at center, rgba(253,186,75,0.14), transparent 45%), linear-gradient(145deg, #10131a, #202533); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+    .device::before { content: ""; position: absolute; inset: 18px; border-radius: 28px; border: 1px solid rgba(255,255,255,0.06); }
+    .ring { width: 210px; height: 210px; border-radius: 50%; border: 17px solid rgba(255,255,255,0.08); border-top-color: var(--accent); border-right-color: var(--accent); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 50px rgba(253,186,75,0.2); }
+    .weight { text-align: center; }
+    .weight strong { display: block; font-size: 48px; letter-spacing: -0.06em; }
+    .weight span { color: var(--muted); font-size: 13px; font-weight: 850; letter-spacing: 0.08em; }
+
+    .quick-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .stat { border: 1px solid var(--border); border-radius: 18px; padding: 14px; background: rgba(255,255,255,0.045); }
+    .stat b { display: block; font-size: 20px; color: var(--accent2); }
+    .stat span { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; line-height: 1.35; }
+
+    section.block { margin-top: 24px; padding: clamp(24px, 4vw, 36px); }
+    .grid { display: grid; gap: 16px; }
+    .grid.three { grid-template-columns: repeat(3, 1fr); }
+    .grid.two { grid-template-columns: repeat(2, 1fr); }
+    .mini-card { background: rgba(255,255,255,0.045); border: 1px solid var(--border); border-radius: 22px; padding: 18px; }
+    .mini-card p, .block p { color: var(--muted); line-height: 1.58; margin: 0; }
+
+    .bom { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 18px; }
+    .bom th, .bom td { text-align: left; vertical-align: top; padding: 14px; border-bottom: 1px solid var(--border); }
+    .bom th { color: var(--accent); background: rgba(253,186,75,0.08); font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .bom td { color: var(--muted); line-height: 1.45; }
+    .bom td:first-child { color: var(--text); font-weight: 800; min-width: 170px; }
+    .bom tr:last-child td { border-bottom: 0; }
+
+    .build-steps { counter-reset: build; display: grid; gap: 14px; }
+    .build-step { counter-increment: build; display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; background: rgba(255,255,255,0.045); border: 1px solid var(--border); border-radius: 20px; padding: 16px; }
+    .build-step::before { content: counter(build); width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(94,234,212,0.12); border: 1px solid rgba(94,234,212,0.28); color: var(--accent2); font-weight: 950; }
+    .build-step b { display: block; margin-bottom: 5px; }
+    .build-step span { color: var(--muted); line-height: 1.5; }
+
+    .install-box { background: var(--panel); border: 1px solid var(--border); border-radius: 22px; padding: 20px; margin-top: 18px; }
+    .install-title { font-weight: 900; margin-bottom: 8px; font-size: 19px; }
+    .install-note { color: var(--muted); font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
+    .warning { margin-top: 18px; color: #fed7aa; background: rgba(251,146,60,0.1); border: 1px solid rgba(251,146,60,0.25); border-radius: 18px; padding: 14px 16px; font-size: 14px; line-height: 1.5; }
+
+    footer { text-align: center; color: var(--muted); font-size: 13px; margin: 28px 0 10px; }
+
+    @media (max-width: 880px) {
+      body { padding: 14px; }
+      .nav { position: static; align-items: flex-start; flex-direction: column; }
+      .hero, .grid.three, .grid.two, .actions { grid-template-columns: 1fr; }
+      .quick-stats { grid-template-columns: 1fr; }
+      .main, .side { padding: 24px; }
+      .bom { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <nav class="nav" aria-label="Project navigation">
+      <div class="brand"><div class="brand-mark">☕</div> PourBot</div>
+      <div class="nav-links">
+        <a href="#about">Project</a>
+        <a href="#features">Features</a>
+        <a href="#bom">BoM</a>
+        <a href="#build">Build Guide</a>
+        <a href="#flash">Flash</a>
+      </div>
+    </nav>
+
+    <section class="hero" id="about">
+      <div class="card main">
+        <div class="badge">An Open-source ESP32 Pourover Coffee Scale</div>
+        <h1>PourBot :<br /> The Smart Pourover Scale</h1>
+        <p class="subtitle">
+          PourBot is an open-source smart coffee scale built for serious manual brewers. 
+          Powered by the<span class="highlight"> Waveshare ESP32-S3 Touch AMOLED</span>, it features a rechargeable battery, a modern touchscreen interface, 
+          integrated calibration tools, and one-click browser-based firmware updates.
+        </p>
+        <div class="actions">
+          <a class="button-link" href="#flash">Install Firmware</a>
+          <a class="button-link secondary" href="#build">Start Build Guide</a>
+        </div>
+      </div>
+
+      <aside class="card side" aria-label="PourBot interface preview">
+        <div class="device">
+          <div class="ring">
+            <div class="weight">
+              <strong>42.0g</strong>
+              <span>TARGET WEIGHT</span>
+            </div>
+          </div>
+        </div>
+        <div class="quick-stats">
+          <div class="stat"><b>HX711</b><span>Load-cell based weighing</span></div>
+          <div class="stat"><b>AMOLED</b><span>Touch interface</span></div>
+          <div class="stat"><b>USB-C</b><span>Web firmware flashing</span></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="card block" id="features">
+      <h2>PourBot Features</h2>
+      <div class="grid three">
+        <div class="mini-card"><h3>Assisted Brewing</h3><p>Brew with confidence. PourBot guides every pour so you can focus on the coffee.</p></div>
+        <div class="mini-card"><h3>Brew Progress Ring</h3><p>The central progress ring gives you an instant visual of your brew, showing exactly how close you are to your target weight.</p></div>
+        <div class="mini-card"><h3>Calibration Tools</h3><p>Built-in calibration allows you to fine-tune the scale for consistent 0.1 g accuracy.</p></div>
+        <div class="mini-card"><h3>Battery Powered</h3><p>Designed specifically for the Waveshare platform, with seamless battery integration and real-time power monitoring for brewing on the go.</p></div>
+        <div class="mini-card"><h3>Web Connected</h3><p>Access the browser-accessible dashboard for more feautures.</p></div>
+        <div class="mini-card"><h3>Easy Updates</h3><p>Use the web installer below to flash new PourBot firmware directly from Chrome or Edge.</p></div>
+      </div>
+    </section>
+
+    <section class="card block" id="bom">
+      <h2>Bill of Materials</h2>
+      <p style="margin-bottom:16px;">These are the core parts needed to build your own PourBot! Exact enclosure screws, wire lengths, and mounting hardware may vary depending on your printed case.</p>
+      <table class="bom">
+        <thead><tr><th>Part</th><th>Purpose</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Waveshare ESP32-S3 Touch AMOLED 1.64&quot; <a href="https://a.co/d/07kAYgKJ" target="_blank">Link</a></td><td>Main controller </td><td>The small 1.64 AMOLED display gives crisp visuals and is the perfect size for a compact smart scale.</td></tr>
+          <tr><td>HX711 load-cell amplifier <a href="https://www.aliexpress.us/item/3256806811447279.html" target="_blank">Link</a></td><td>Reads the load cell and sends stable weight data to the ESP32-S3.</td><td>Keep wiring short and strain-relieved. Mount away from high-noise power wiring.</td></tr>
+          <tr><td>80mm load cell <a href="https://www.aliexpress.us/item/3256806811447279.html" target="_blank">Link</a></td><td>The weighing sensor under the brew platform.</td><td>A small bar-style load cell in the 1 kg range is typical for pourover scale use.</td></tr>
+          <tr><td>LiPo battery <a href="https://a.co/d/06wAY3aB" target="_blank">Link</a></td><td>Portable power for the scale.</td><td>Use a protected single-cell LiPo compatible with the Waveshare battery connector and charging circuit.</td></tr>
+          <tr><td>3D-printed enclosure</td><td>Holds the display, load cell, HX711, battery, and brew platform.</td><td>Use a rigid print and avoid flex around the load-cell mounting points.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card block" id="build">
+      <h2>Step-by-Step Build Guide</h2>
+      <div class="build-steps">
+        <div class="build-step"><div><b>Print and inspect the enclosure.</b><span>Make sure the load-cell mount is flat, rigid, and free of warped surfaces. Any flex in the case can show up as drift or unstable readings.</span></div></div>
+        <div class="build-step"><div><b>Mount the fixed side of the load cell.</b><span>Bolt the fixed end of the load cell firmly to the lower body of the enclosure. Do not overtighten to the point that the sensor body twists.</span></div></div>
+        <div class="build-step"><div><b>Mount the brew platform to the live side.</b><span>The top plate should attach only to the sensing side of the load cell. Confirm it moves freely and does not rub the case.</span></div></div>
+        <div class="build-step"><div><b>Wire the load cell to the HX711.</b><span>Connect the four load-cell leads to E+, E-, A+, and A- on the HX711. If readings move backwards, swap A+ and A-.</span></div></div>
+        <div class="build-step"><div><b>Connect the HX711 to the ESP32-S3.</b><span>Connect VCC, GND, data, and clock according to the project hardware configuration. Keep signal wires neat and separated from battery leads when possible.</span></div></div>
+        <div class="build-step"><div><b>Install the ESP32-S3 AMOLED module.</b><span>Seat the display/controller in the front opening, route wiring carefully, and confirm the touchscreen is not under mechanical stress.</span></div></div>
+        <div class="build-step"><div><b>Connect the battery.</b><span>Use the Waveshare battery connector and verify polarity before plugging it in. Charge and test by USB-C before closing the enclosure.</span></div></div>
+        <div class="build-step"><div><b>Flash PourBot firmware.</b><span>Use the installer below from Chrome or Edge. Select the ESP32-S3 USB serial port when prompted.</span></div></div>
+        <div class="build-step"><div><b>Calibrate the scale.</b><span>Boot PourBot, tare with the platform empty, then run calibration with a known reference weight. Save the calibration value when readings look stable.</span></div></div>
+        <div class="build-step"><div><b>Final test with a real brew setup.</b><span>Place your server and dripper on the scale, tare, start the brew timer, and confirm the touch buttons, weight reading, and progress ring behave as expected.</span></div></div>
+      </div>
+      <div class="warning"><strong>Safety note:</strong> LiPo batteries can be damaged by shorts, punctures, reversed polarity, or crushed wiring. Inspect the wiring before closing the case and never leave a damaged battery installed.</div>
+    </section>
+
+    <section class="card block" id="flash">
+      <h2>Firmware Installer</h2>
+      <p>Flash the latest included PourBot firmware files directly from this page. The installer works best in Chrome or Edge on a desktop computer.</p>
+      <div class="install-box">
+        <div class="install-title">Ready to flash PourBot?</div>
+        <div class="install-note">Plug the Waveshare ESP32-S3 into your computer with a data-capable USB-C cable, then click the button and choose the correct USB serial port.</div>
+        <esp-web-install-button manifest="manifest.json">
+          <button slot="activate">Install PourBot Firmware</button>
+        </esp-web-install-button>
+      </div>
+      <div class="warning">Flashing may erase stored settings. After installing, check Wi-Fi settings, tare behavior, battery display, and scale calibration before your next brew.</div>
+    </section>
+
+    <footer>PourBot Smart Pourover Scale</footer>
+  </main>
+</body>
+</html>
