@@ -6,9 +6,9 @@
 
 **Precision Brewing. Modern Hardware. Completely Open Source.**
 
-[![Flash Firmware](https://img.shields.io/badge/⚡%20Flash%20Firmware-Click%20Here-orange?style=for-the-badge)](https://YOUR_USERNAME.github.io/PourBot/)
-[![Latest Release](https://img.shields.io/github/v/release/YOUR_USERNAME/PourBot?style=for-the-badge)](../../releases)
-[![License](https://img.shields.io/github/license/YOUR_USERNAME/PourBot?style=for-the-badge)](LICENSE)
+[![Flash Firmware](https://img.shields.io/badge/⚡%20Flash%20Firmware-Click%20Here-orange?style=for-the-badge)](https://kalendor.github.io/PourBot/)
+[![Latest Release](https://img.shields.io/github/v/release/kalendor/PourBot?style=for-the-badge)](../../releases)
+[![License](https://img.shields.io/github/license/kalendor/PourBot?style=for-the-badge)](LICENSE)
 
 ---
 
