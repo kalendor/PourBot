@@ -34,7 +34,7 @@
 
 ⚡ **Flash the latest firmware in your browser.**
 
-## 👉 https://YOUR_USERNAME.github.io/PourBot/
+## 👉 https://kalendor.github.io/PourBot/
 
 No Arduino IDE.
 
