@@ -126,7 +126,7 @@ PourBot uses **ESP Web Tools**.
 
 Flash firmware directly from your browser.
 
-## https://YOUR_USERNAME.github.io/PourBot/
+## https://kalendor.github.io/PourBot/
 
 ### Requirements
 
