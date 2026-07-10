@@ -1,135 +1,205 @@
 # ☕ PourBot
 
-> **An open-source smart pour-over coffee scale built for precision brewing.**
+<div align="center">
 
-PourBot is a DIY smart coffee scale designed for coffee enthusiasts who want the features of a premium commercial scale while enjoying the flexibility of an open-source project.
+# The Open-Source Smart Pour-Over Coffee Scale
 
-Built around the **Waveshare ESP32-S3 Touch AMOLED**, PourBot combines precision weighing, an intuitive touchscreen interface, rechargeable battery operation, and browser-based firmware installation into one compact package.
+**Precision Brewing. Modern Hardware. Completely Open Source.**
+
+[![Flash Firmware](https://img.shields.io/badge/⚡%20Flash%20Firmware-Click%20Here-orange?style=for-the-badge)](https://YOUR_USERNAME.github.io/PourBot/)
+[![Latest Release](https://img.shields.io/github/v/release/YOUR_USERNAME/PourBot?style=for-the-badge)](../../releases)
+[![License](https://img.shields.io/github/license/YOUR_USERNAME/PourBot?style=for-the-badge)](LICENSE)
 
 ---
 
-## ✨ Features
+*A DIY smart coffee scale powered by the Waveshare ESP32-S3 Touch AMOLED.*
 
-### ☕ Assisted Brewing
+</div>
 
-PourBot guides you through every pour, helping you brew consistently exceptional coffee with confidence.
+---
 
-### 🎯 Brew Progress Ring
+## 📸 PourBot
 
-The animated center progress ring provides instant visual feedback, showing exactly how close you are to your target weight.
+> *(Add a photo or animated GIF of the finished scale here.)*
 
-### ⚖️ Precision Calibration
+---
 
-Built-in calibration allows you to fine-tune the scale for consistent **0.1 g accuracy**.
+# 🚀 Quick Start
 
-### 🔋 Battery Powered
+### Want to build your own?
 
-Designed specifically for the Waveshare ESP32-S3 platform with integrated battery charging and real-time battery monitoring for truly portable brewing.
+📖 **Follow the Build Guide below.**
 
-### 🌐 Browser-Based Configuration
+### Already built one?
 
-Access PourBot's web interface for advanced settings, calibration, firmware management, and additional features.
+⚡ **Flash the latest firmware in your browser.**
 
-### 🚀 One-Click Firmware Updates
+## 👉 https://YOUR_USERNAME.github.io/PourBot/
 
-Update your scale directly from Chrome or Microsoft Edge using ESP Web Tools—no Arduino IDE required.
+No Arduino IDE.
+
+No drivers.
+
+No compiling.
+
+Just plug in your ESP32-S3, click **Install Firmware**, and you're brewing in minutes.
+
+---
+
+# ✨ Features
+
+✅ Assisted Brewing
+
+Guide every pour with on-screen brewing assistance.
+
+---
+
+✅ Animated Brew Progress Ring
+
+Watch your progress toward your target weight in real time.
+
+---
+
+✅ 0.1 g Precision
+
+Built-in calibration delivers accurate, repeatable measurements.
+
+---
+
+✅ Touchscreen Interface
+
+Everything you need is available directly on the AMOLED display.
+
+---
+
+✅ Rechargeable Battery
+
+Integrated battery charging and monitoring make PourBot perfect for brewing anywhere.
+
+---
+
+✅ Browser Dashboard
+
+Configure settings, calibration, Wi-Fi, and more from your web browser.
+
+---
+
+✅ One-Click Firmware Updates
+
+Update directly from Chrome or Edge using ESP Web Tools.
 
 ---
 
 # Hardware
 
-PourBot is built around a small collection of readily available components.
-
-| Component                             | Purpose                                 |
-| ------------------------------------- | --------------------------------------- |
-| Waveshare ESP32-S3 Touch AMOLED 1.64" | Main controller and touchscreen display |
-| HX711 Load Cell Amplifier             | High-resolution weight measurement      |
-| 1 kg Bar Style Load Cell              | Precision weighing sensor               |
-| Single Cell LiPo Battery              | Portable power                          |
-| 3D Printed Enclosure                  | Houses all electronics                  |
+| Component                             | Description                 |
+| ------------------------------------- | --------------------------- |
+| Waveshare ESP32-S3 Touch AMOLED 1.64" | Main controller and display |
+| HX711                                 | Load-cell amplifier         |
+| 1 kg Bar Load Cell                    | Precision weight sensor     |
+| LiPo Battery                          | Portable power              |
+| 3D Printed Enclosure                  | Custom printed housing      |
 
 ---
 
-# Build Guide
+# Build Overview
 
-Building PourBot is straightforward.
+Building PourBot takes about an hour.
 
-1. Print the enclosure.
-2. Install the load cell.
-3. Mount the brew platform.
-4. Wire the load cell to the HX711.
-5. Connect the HX711 to the ESP32-S3.
-6. Install the AMOLED display.
-7. Connect the LiPo battery.
-8. Flash the firmware.
-9. Calibrate the scale.
-10. Brew coffee!
+1. Print the enclosure
+2. Install the load cell
+3. Mount the brew platform
+4. Wire the HX711
+5. Connect the ESP32-S3
+6. Install the battery
+7. Flash firmware
+8. Calibrate
+9. Brew coffee ☕
+
+A full illustrated build guide is available on the project website.
 
 ---
 
-# Firmware Installation
+# 🌐 Web Firmware Installer
 
-Firmware can be installed directly from your browser using **ESP Web Tools**.
+PourBot uses **ESP Web Tools**.
 
-Simply:
+Flash firmware directly from your browser.
 
-1. Connect the ESP32-S3 with a USB-C data cable.
-2. Open the project website.
-3. Click **Install Firmware**.
-4. Select the correct serial port.
-5. Wait for flashing to complete.
+## https://YOUR_USERNAME.github.io/PourBot/
 
-No Arduino IDE or PlatformIO installation is required.
+### Requirements
+
+* Chrome or Microsoft Edge
+* USB-C data cable
+* Waveshare ESP32-S3 Touch AMOLED
+
+No Arduino IDE required.
 
 ---
 
 # Current Features
 
-* Precision weight measurement
+* Precision scale
 * 0.1 g resolution
 * Brew timer
-* Assisted brewing mode
-* Animated brew progress ring
-* Tare controls
-* Touchscreen interface
-* Rechargeable battery support
+* Assisted Brewing
+* Brew Progress Ring
+* Touch controls
 * Battery monitoring
-* Wi-Fi connectivity
-* Browser-based settings
+* Wi-Fi
+* Browser configuration
 * Browser firmware updates
-* Built-in scale calibration
+* Built-in calibration
+* Portable battery operation
 
 ---
 
 # Roadmap
 
-Future ideas include:
+Future improvements include:
 
-* Recipe library
-* Brew profile storage
-* Automatic brew logging
-* Bluetooth integration
+* Brew recipe library
+* Multiple brewing modes
+* Recipe sharing
+* Brew history
+* Automatic logging
+* Bluetooth support
+* OTA updates
 * Cloud synchronization
-* Additional brewing modes
-* Advanced brew analytics
 
 ---
 
-# Open Source
+# Contributing
 
-PourBot is an open-source project created for the coffee and maker communities.
+Contributions are welcome!
 
-Contributions, bug reports, feature requests, and pull requests are always welcome.
+Whether it's:
+
+* Bug fixes
+* New features
+* Documentation
+* UI improvements
+* Hardware modifications
+
+feel free to submit a Pull Request.
 
 ---
 
 # License
 
-This project is released under the MIT License.
+Released under the MIT License.
 
 ---
 
-## Happy Brewing! ☕
+<div align="center">
 
-If you build a PourBot, we'd love to see it. Share your builds, modifications, and brewing setups with the community!
+### ☕
 
+**If you build a PourBot, we'd love to see it!**
+
+Share your builds, modifications, and brewing setups with the community.
+
+Happy Brewing!
+
+</div>
