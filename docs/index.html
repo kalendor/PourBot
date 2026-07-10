@@ -166,13 +166,12 @@
 
     <section class="hero" id="about">
       <div class="card main">
-        <div class="badge">Open-source ESP32-S3 coffee scale</div>
-        <h1>PourBot<br />Smart Pourover Scale</h1>
+        <div class="badge">An Open-source ESP32 Pourover Coffee Scale</div>
+        <h1>PourBot :<br /> The Smart Pourover Scale</h1>
         <p class="subtitle">
-          PourBot is a DIY smart scale for manual coffee brewing. It combines a compact
-          <span class="highlight">Waveshare ESP32-S3 Touch AMOLED</span>, an HX711 load-cell amplifier,
-          a precision load cell, battery power, on-screen brew controls, calibration tools,
-          and a browser-based firmware installer.
+          PourBot is an open-source smart coffee scale built for serious manual brewers. 
+          Powered by the<span class="highlight"> Waveshare ESP32-S3 Touch AMOLED</span>, it features a rechargeable battery, a modern touchscreen interface, 
+          integrated calibration tools, and one-click browser-based firmware updates.
         </p>
         <div class="actions">
           <a class="button-link" href="#flash">Install Firmware</a>
@@ -198,33 +197,28 @@
     </section>
 
     <section class="card block" id="features">
-      <h2>What PourBot Does</h2>
+      <h2>PourBot Features</h2>
       <div class="grid three">
-        <div class="mini-card"><h3>Assistedbrewing</h3><p>Large on-screen weight, timer, tare, start/pause, and reset controls designed for the small round AMOLED display.</p></div>
-        <div class="mini-card"><h3>Brew progress ring</h3><p>The center display shows your current brew progress and helps you see how close you are to the target weight at a glance.</p></div>
-        <div class="mini-card"><h3>Calibration tools</h3><p>Built-in scale calibration and settings pages make it easier to tune the load cell after assembly.</p></div>
-        <div class="mini-card"><h3>Battery Powered</h3><p>Designed around the Waveshare board battery connector and power monitoring support for portable coffee brewing.</p></div>
-        <div class="mini-card"><h3>Web Dashboard</h3><p>The firmware includes a browser-accessible dashboard and setup pages for settings, diagnostics, and recipes.</p></div>
-        <div class="mini-card"><h3>Easy Updates</h3><p>Use the web installer below to flash new PourBot firmware directly from Chrome or Edge with a data-capable USB-C cable.</p></div>
+        <div class="mini-card"><h3>Assisted Brewing</h3><p>Brew with confidence. PourBot guides every pour so you can focus on the coffee.</p></div>
+        <div class="mini-card"><h3>Brew Progress Ring</h3><p>The central progress ring gives you an instant visual of your brew, showing exactly how close you are to your target weight.</p></div>
+        <div class="mini-card"><h3>Calibration Tools</h3><p>Built-in calibration allows you to fine-tune the scale for consistent 0.1 g accuracy.</p></div>
+        <div class="mini-card"><h3>Battery Powered</h3><p>Designed specifically for the Waveshare platform, with seamless battery integration and real-time power monitoring for brewing on the go.</p></div>
+        <div class="mini-card"><h3>Web Connected</h3><p>Access the browser-accessible dashboard for more feautures.</p></div>
+        <div class="mini-card"><h3>Easy Updates</h3><p>Use the web installer below to flash new PourBot firmware directly from Chrome or Edge.</p></div>
       </div>
     </section>
 
     <section class="card block" id="bom">
       <h2>Bill of Materials</h2>
-      <p style="margin-bottom:16px;">These are the core parts needed to build the current PourBot hardware layout. Exact enclosure screws, wire lengths, and mounting hardware may vary depending on your printed case.</p>
+      <p style="margin-bottom:16px;">These are the core parts needed to build your own PourBot! Exact enclosure screws, wire lengths, and mounting hardware may vary depending on your printed case.</p>
       <table class="bom">
         <thead><tr><th>Part</th><th>Purpose</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>Waveshare ESP32-S3 Touch AMOLED 1.64&quot;</td><td>Main controller, touchscreen, USB-C, battery interface, and display.</td><td>Use the ESP32-S3 Touch AMOLED 1.64 hardware target used by this firmware.</td></tr>
-          <tr><td>HX711 load-cell amplifier</td><td>Reads the load cell and sends stable weight data to the ESP32-S3.</td><td>Keep wiring short and strain-relieved. Mount away from high-noise power wiring.</td></tr>
-          <tr><td>Precision load cell</td><td>The weighing sensor under the brew platform.</td><td>A small bar-style load cell in the 1 kg range is typical for pourover scale use.</td></tr>
-          <tr><td>LiPo battery</td><td>Portable power for the scale.</td><td>Use a protected single-cell LiPo compatible with the Waveshare battery connector and charging circuit.</td></tr>
-          <tr><td>USB-C data cable</td><td>Firmware flashing, serial monitor, and charging.</td><td>Many charge-only cables will not work for flashing.</td></tr>
+          <tr><td>Waveshare ESP32-S3 Touch AMOLED 1.64&quot; <a href="https://a.co/d/07kAYgKJ" target="_blank">Link</a></td><td>Main controller </td><td>The small 1.64 AMOLED display gives crisp visuals and is the perfect size for a compact smart scale.</td></tr>
+          <tr><td>HX711 load-cell amplifier <a href="https://www.aliexpress.us/item/3256806811447279.html" target="_blank">Link</a></td><td>Reads the load cell and sends stable weight data to the ESP32-S3.</td><td>Keep wiring short and strain-relieved. Mount away from high-noise power wiring.</td></tr>
+          <tr><td>80mm load cell <a href="https://www.aliexpress.us/item/3256806811447279.html" target="_blank">Link</a></td><td>The weighing sensor under the brew platform.</td><td>A small bar-style load cell in the 1 kg range is typical for pourover scale use.</td></tr>
+          <tr><td>LiPo battery <a href="https://a.co/d/06wAY3aB" target="_blank">Link</a></td><td>Portable power for the scale.</td><td>Use a protected single-cell LiPo compatible with the Waveshare battery connector and charging circuit.</td></tr>
           <tr><td>3D-printed enclosure</td><td>Holds the display, load cell, HX711, battery, and brew platform.</td><td>Use a rigid print and avoid flex around the load-cell mounting points.</td></tr>
-          <tr><td>Brew platform / top plate</td><td>Supports the dripper, server, or cup.</td><td>Attach only to the live end of the load cell so weight transfers correctly.</td></tr>
-          <tr><td>Small screws, standoffs, and inserts</td><td>Mechanical assembly.</td><td>Threaded inserts are helpful for repeated opening and adjustment.</td></tr>
-          <tr><td>JST / Dupont wiring</td><td>Connects ESP32-S3, HX711, load cell, and battery.</td><td>Double-check polarity before powering the board.</td></tr>
-          <tr><td>Known calibration weight</td><td>Scale calibration.</td><td>Use a reliable reference weight, such as 100 g, 200 g, or 500 g.</td></tr>
         </tbody>
       </table>
     </section>
