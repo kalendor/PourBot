@@ -41,6 +41,7 @@ private:
     WebDashboard web;
     PowerMonitor power;
     uint32_t last_ui_ms = 0;
+    uint32_t last_web_state_ms = 0;
 
     float known_calibration_weight_g = 100.0f;
     const char* calibration_message = "Ready";

@@ -5,6 +5,15 @@
 
 App* g_app = nullptr;
 
+namespace {
+// At the common HX711 10 SPS rate, 16 samples makes an ordinary tare take about
+// 1.6 seconds. Five samples still average electrical noise while bringing the
+// expected response below about 0.6 seconds. Calibration uses more samples
+// because zero accuracy matters more there than button latency.
+constexpr uint8_t kQuickTareSamples = 5;
+constexpr uint8_t kCalibrationTareSamples = 12;
+}
+
 static void tare_event_cb(lv_event_t*) { if (g_app) g_app->tare(); }
 static void start_event_cb(lv_event_t*) { if (g_app) g_app->toggle_brew(); }
 static void reset_event_cb(lv_event_t*) { if (g_app) g_app->reset_brew(); }
@@ -38,15 +47,6 @@ void App::begin() {
     Serial.println(scale.ready() ? "HX711 ready" : "HX711 not ready");
     Serial.printf("Calibration factor: %.2f\n", saved_calibration_factor);
 
-    // Tare/calibration reads block for up to ~1.5-1.8s. Keep the display and web
-    // dashboard alive during that window instead of freezing until it's done.
-    scale.set_idle_pump_callback([]() {
-        if (g_app) {
-            g_app->display.update();
-            g_app->web.update();
-        }
-    });
-
     show_home();
     web.begin(web_tare_cb, web_start_cb, web_reset_cb, web_target_cb, web_cal_tare_cb, web_calibrate_cb, web_recipe_cb);
 }
@@ -74,9 +74,8 @@ void App::update() {
     PowerStatus power_status = power.status();
 
     const float current_weight_g = scale.grams();
-    // v57: back to basics. All auto-start, pre-brew auto-tare, and
-    // post-brew auto-reset automation is disabled. Tare, Start/Pause,
-    // and Reset are now manual only.
+    // Starting a fresh brew performs a quick tare in toggle_brew(). Resuming a
+    // paused brew never tares, so the accumulated water weight is preserved.
     const bool prep_pending = false;
     const bool ready_to_pour = false;
     const float ui_weight_g = current_weight_g;
@@ -84,33 +83,36 @@ void App::update() {
     brew_engine.update(recipe, ui_weight_g, brew.elapsed_ms(), brew.is_running());
     BrewStageStatus stage_status = brew_engine.status(recipe);
 
-    WebDashboardState web_state;
-    web_state.weight_g = ui_weight_g;
-    web_state.flow_gps = scale.flow_gps();
-    web_state.target_g = recipe.water_g;
-    web_state.calibration_factor = scale.calibration_factor();
-    web_state.elapsed_ms = brew.elapsed_ms();
-    web_state.running = brew.is_running();
-    web_state.battery_percent = power_status.percent;
-    web_state.battery_voltage_v = power_status.voltage_v;
-    web_state.battery_raw_adc = power_status.raw_adc;
-    web_state.battery_pin_voltage_v = power_status.pin_voltage_v;
-    web_state.battery_valid = power_status.valid;
-    web_state.battery_percent_valid = power_status.percent_valid;
-    web_state.charging = power_status.charge_estimate;
-    web_state.prebrew_pending = prep_pending;
-    web_state.pour_ready = ready_to_pour;
-    web_state.screen_name = (screen == Screen::Home) ? "Home" : (screen == Screen::Settings) ? "Settings" : "Calibration";
-    web_state.recipe = recipe;
-    web_state.stage = stage_status;
-    web.set_state(web_state);
+    uint32_t now = millis();
+    if (now - last_web_state_ms >= 50) {
+        last_web_state_ms = now;
+        WebDashboardState web_state;
+        web_state.weight_g = ui_weight_g;
+        web_state.flow_gps = scale.flow_gps();
+        web_state.target_g = recipe.water_g;
+        web_state.calibration_factor = scale.calibration_factor();
+        web_state.elapsed_ms = brew.elapsed_ms();
+        web_state.running = brew.is_running();
+        web_state.battery_percent = power_status.percent;
+        web_state.battery_voltage_v = power_status.voltage_v;
+        web_state.battery_raw_adc = power_status.raw_adc;
+        web_state.battery_pin_voltage_v = power_status.pin_voltage_v;
+        web_state.battery_valid = power_status.valid;
+        web_state.battery_percent_valid = power_status.percent_valid;
+        web_state.charging = power_status.charge_estimate;
+        web_state.prebrew_pending = prep_pending;
+        web_state.pour_ready = ready_to_pour;
+        web_state.screen_name = (screen == Screen::Home) ? "Home" : (screen == Screen::Settings) ? "Settings" : "Calibration";
+        web_state.recipe = recipe;
+        web_state.stage = stage_status;
+        web.set_state(web_state);
+    }
     web.update();
 
-    uint32_t now = millis();
     if (now - last_ui_ms >= 100) {
         last_ui_ms = now;
         if (screen == Screen::Home) {
-            home.update(ui_weight_g, scale.flow_gps(), brew.elapsed_ms(), brew.is_running(), recipe, stage_status, power_status.percent, power_status.percent_valid, power_status.charge_estimate, prep_pending, ready_to_pour);
+            home.update(ui_weight_g, brew.elapsed_ms(), brew.is_running(), recipe, stage_status, power_status.percent, power_status.percent_valid, power_status.charge_estimate, prep_pending, ready_to_pour);
         } else if (screen == Screen::Calibration) {
             calibration.update(current_weight_g, known_calibration_weight_g, scale.calibration_factor(), calibration_message);
         }
@@ -118,13 +120,33 @@ void App::update() {
 }
 
 void App::tare() {
-    bool ok = scale.tare_blocking(screen == Screen::Calibration ? 24 : 16, 1500);
+    const uint8_t samples = screen == Screen::Calibration
+        ? kCalibrationTareSamples
+        : kQuickTareSamples;
+    bool ok = scale.tare_blocking(samples, 1500);
     if (screen == Screen::Calibration) {
         calibration_message = ok ? "Tared. Place known weight." : "Tare failed. Try again.";
     }
 }
 
-void App::toggle_brew() { brew.toggle(); }
+void App::toggle_brew() {
+    if (brew.is_running()) {
+        brew.pause();
+        return;
+    }
+
+    // An elapsed time of zero identifies a fresh brew. A paused brew has a
+    // non-zero elapsed time and should resume without changing the zero point.
+    if (brew.elapsed_ms() == 0) {
+        if (!scale.tare_blocking(kQuickTareSamples, 1500)) {
+            Serial.println("START cancelled: automatic tare failed");
+            return;
+        }
+        brew_engine.reset();
+    }
+
+    brew.start();
+}
 void App::reset_brew() {
     brew.reset();
     brew_engine.reset();
@@ -149,7 +171,7 @@ void App::run_calibration() {
 }
 
 void App::run_web_calibration_tare() {
-    bool ok = scale.tare_blocking(24, 1500);
+    bool ok = scale.tare_blocking(kCalibrationTareSamples, 1500);
     calibration_message = ok ? "Web calibration tare complete" : "Web calibration tare failed";
     Serial.println(ok ? "WEB CAL TARE complete" : "WEB CAL TARE failed");
 }

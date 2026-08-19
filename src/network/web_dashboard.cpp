@@ -285,7 +285,16 @@ static String wifi_json_escape(const String& value) {
 
 void WebDashboard::handle_wifi_scan() {
     server.sendHeader("Cache-Control", "no-store");
-    const int count = WiFi.scanNetworks(false, true);
+    int count = WiFi.scanComplete();
+    if (count == WIFI_SCAN_FAILED) {
+        WiFi.scanNetworks(true, true);
+        server.send(202, "application/json", "{\"ok\":true,\"scanning\":true,\"networks\":[]}");
+        return;
+    }
+    if (count == WIFI_SCAN_RUNNING) {
+        server.send(202, "application/json", "{\"ok\":true,\"scanning\":true,\"networks\":[]}");
+        return;
+    }
     String json;
     json.reserve(1200);
     json += "{\"ok\":";
@@ -855,6 +864,14 @@ String WebDashboard::build_settings_html() const {
     .preset button { min-height:42px; padding:10px 6px; font-size:14px; background:#1e293b; }
     .hint { color:#64748b; font-size:13px; line-height:1.35; margin-top:8px; }
     .small { color:#64748b; text-align:center; margin-top:14px; font-size:12px; }
+    .battery-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .battery-stat { background:#020617; border:1px solid #1e293b; border-radius:16px; padding:13px; min-height:76px; }
+    .battery-stat span { display:block; color:#64748b; font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+    .battery-stat strong { display:block; margin-top:7px; color:#f8fafc; font-size:20px; font-variant-numeric:tabular-nums; }
+    .battery-health { margin-top:10px; padding:12px 14px; border-radius:15px; background:#172033; color:#cbd5e1; font-size:13px; font-weight:750; line-height:1.4; }
+    .battery-health.good { background:rgba(22,163,74,.16); color:#86efac; }
+    .battery-health.warn { background:rgba(217,119,6,.18); color:#fcd34d; }
+    .battery-health.bad { background:rgba(185,28,28,.20); color:#fca5a5; }
 
     @media (min-width:430px) { .top { grid-template-columns:1fr auto; align-items:center; } .top div { grid-template-columns:auto auto auto; } .top a { min-width:92px; } }
     @media (max-width:390px), (max-height:720px) {
@@ -917,6 +934,18 @@ String WebDashboard::build_settings_html() const {
       </div>
 
       <div class="section">
+        <h2>Battery Status</h2>
+        <div class="battery-grid">
+          <div class="battery-stat"><span>Power source</span><strong id="batterySource">Checking...</strong></div>
+          <div class="battery-stat"><span>Charge</span><strong id="batteryPercent">--</strong></div>
+          <div class="battery-stat"><span>System voltage</span><strong id="batteryVoltage">--</strong></div>
+          <div class="battery-stat"><span>Charging rate</span><strong id="chargeRate">Unavailable</strong></div>
+        </div>
+        <div class="battery-health" id="batteryHealth">Reading power monitor...</div>
+        <div class="hint" id="batteryDetail">This board senses voltage but has no current sensor, so charging current and watts cannot be measured.</div>
+      </div>
+
+      <div class="section">
         <h2>Calibration</h2>
         <div class="hint">Empty the scale, tap CAL TARE, place a known weight, enter its grams, then tap CALIBRATE.</div>
         <div class="target" style="margin-top:10px;">
@@ -943,6 +972,12 @@ const el = {
   customRatioInput: document.getElementById('customRatioInput'),
   ratioTargetText: document.getElementById('ratioTargetText'),
   knownInput: document.getElementById('knownInput'),
+  batterySource: document.getElementById('batterySource'),
+  batteryPercent: document.getElementById('batteryPercent'),
+  batteryVoltage: document.getElementById('batteryVoltage'),
+  chargeRate: document.getElementById('chargeRate'),
+  batteryHealth: document.getElementById('batteryHealth'),
+  batteryDetail: document.getElementById('batteryDetail'),
   meta: document.getElementById('meta')
 };
 let settingsStatusInFlight = false;
@@ -979,6 +1014,41 @@ async function setTarget(v) {
 function applyManualTarget() { setTarget(el.targetInput.value); }
 function applyRatioTarget() { setTarget(Math.round(calculatedTarget())); }
 
+function updateBattery(d) {
+  const valid = Boolean(d.battery_valid);
+  const usb = Boolean(d.charging);
+  const percentValid = Boolean(d.battery_percent_valid);
+  const percent = Number(d.battery_percent);
+  const voltage = Number(d.battery_voltage_v);
+  const pinVoltage = Number(d.battery_pin_voltage_v);
+  const raw = Number(d.battery_raw_adc);
+
+  el.batterySource.textContent = !valid ? 'Unknown' : (usb ? 'USB power' : 'Battery');
+  el.batteryPercent.textContent = percentValid ? Math.round(percent) + '%' : 'Unknown';
+  el.batteryVoltage.textContent = valid ? voltage.toFixed(2) + ' V' : '--';
+  el.chargeRate.textContent = 'No sensor';
+  el.batteryHealth.className = 'battery-health';
+
+  if (!valid) {
+    el.batteryHealth.textContent = 'Battery ADC reading is invalid. Check the voltage-sense connection or board configuration.';
+    el.batteryHealth.classList.add('bad');
+  } else if (usb) {
+    el.batteryHealth.textContent = 'USB power detected. The measured voltage is the system rail, so battery percentage and charge completion may be unavailable.';
+    el.batteryHealth.classList.add('good');
+  } else if (percentValid && percent <= 10) {
+    el.batteryHealth.textContent = 'Battery is critically low. Recharge soon to avoid an unexpected shutdown.';
+    el.batteryHealth.classList.add('bad');
+  } else if (percentValid && percent <= 20) {
+    el.batteryHealth.textContent = 'Battery is low. Recharge before a long brewing session.';
+    el.batteryHealth.classList.add('warn');
+  } else {
+    el.batteryHealth.textContent = 'Battery voltage is in the normal operating range.';
+    el.batteryHealth.classList.add('good');
+  }
+
+  el.batteryDetail.textContent = 'ADC ' + raw + ' · sense pin ' + pinVoltage.toFixed(3) + ' V · true charge rate requires a current-sense IC.';
+}
+
 async function update() {
   if (settingsStatusInFlight) return;
   settingsStatusInFlight = true;
@@ -988,6 +1058,7 @@ async function update() {
     const target = Number(d.target_g || lastTargetFromScale || 320);
     lastTargetFromScale = target;
     if (document.activeElement !== el.targetInput) el.targetInput.value = Math.round(target);
+    updateBattery(d);
     el.meta.textContent = 'Target ' + Math.round(target) + 'g · Weight ' + Number(d.weight_g || 0).toFixed(1) + 'g · ' + (d.running ? 'BREWING' : 'READY');
   } catch(e) {
     el.meta.textContent = 'Connection lost';
@@ -1209,9 +1280,14 @@ async function scanWifi(){
   list.innerHTML = '';
   el('msg').textContent = 'Scanning nearby WiFi networks...';
   try {
-    const r = await fetch('/api/wifi_scan', {cache:'no-store'});
-    if(!r.ok) throw new Error('scan failed');
-    const d = await r.json();
+    let r;
+    let d;
+    do {
+      r = await fetch('/api/wifi_scan', {cache:'no-store'});
+      if(!r.ok) throw new Error('scan failed');
+      d = await r.json();
+      if(d.scanning) await new Promise(resolve => setTimeout(resolve, 350));
+    } while(d.scanning);
     const seen = new Set();
     const networks = (d.networks || []).filter(n => n.ssid && !seen.has(n.ssid) && seen.add(n.ssid));
     if(!networks.length){ el('msg').textContent = 'No networks found. You can still enter the name manually.'; return; }

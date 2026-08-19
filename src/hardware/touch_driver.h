@@ -19,6 +19,8 @@ public:
 
 private:
     TouchData last_touch;
+    uint8_t consecutive_read_errors = 0;
+    uint32_t last_good_read_ms = 0;
     bool initialized = false;
     bool disabled = false;
     i2c_master_bus_handle_t bus_handle = nullptr;

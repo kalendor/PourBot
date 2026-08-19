@@ -2,20 +2,10 @@
 #include <math.h>
 #include <algorithm>
 
-void HX711Scale::pump_idle_if_due() {
-    if (!idle_pump) return;
-    uint32_t now = millis();
-    // Throttle so we're not hammering display/web work every 1ms of the wait loop.
-    if (now - last_idle_pump_ms < 20) return;
-    last_idle_pump_ms = now;
-    idle_pump();
-}
-
 bool HX711Scale::wait_ready(uint32_t timeout_ms) {
     uint32_t start = millis();
     while (!hx.is_ready()) {
         if (millis() - start >= timeout_ms) return false;
-        pump_idle_if_due();
         delay(1);
     }
     return true;
@@ -28,7 +18,6 @@ bool HX711Scale::read_raw_average_wait(uint8_t samples_to_read, uint32_t timeout
     for (uint8_t i = 0; i < samples_to_read; ++i) {
         if (!wait_ready(timeout_ms)) return false;
         sum += hx.read();
-        pump_idle_if_due();
         delay(2);
     }
 
@@ -250,9 +239,7 @@ bool HX711Scale::tare_blocking(uint8_t samples_to_read, uint32_t timeout_ms) {
 }
 
 void HX711Scale::tare() {
-    // Blocking tare is intentional: the user expects the TARE action to finish
-    // reliably, even if it takes a fraction of a second.
-    tare_blocking(20, 1500);
+    tare_blocking();
 }
 
 

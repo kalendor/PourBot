@@ -48,8 +48,10 @@ void DisplayManager::init() {
     lvgl_display = lv_display_create(screen_width, screen_height);
     lv_display_set_flush_cb(lvgl_display, display_flush_cb);
     lv_display_set_buffers(lvgl_display, draw_buffer, NULL, buffer_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+    // The CO5300 QSPI driver needs complete scanlines. Sending a narrow LVGL
+    // invalidation area causes subsequent pixels to be addressed incorrectly,
+    // which is most visible when a button redraws in its pressed state.
     lv_display_add_event_cb(lvgl_display, display_rounder_cb, LV_EVENT_INVALIDATE_AREA, NULL);
-
     touch_driver.init();
     lvgl_input = lv_indev_create();
     lv_indev_set_type(lvgl_input, LV_INDEV_TYPE_POINTER);
@@ -66,9 +68,11 @@ void DisplayManager::update() {
 }
 
 void DisplayManager::display_rounder_cb(lv_event_t* e) {
-    lv_area_t* area = (lv_area_t*)lv_event_get_param(e);
+    if (!g_display_manager) return;
+    lv_area_t* area = static_cast<lv_area_t*>(lv_event_get_param(e));
+    if (!area) return;
     area->x1 = 0;
-    area->x2 = g_display_manager->screen_width - 1;
+    area->x2 = static_cast<int32_t>(g_display_manager->screen_width) - 1;
 }
 
 void DisplayManager::display_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {

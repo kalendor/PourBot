@@ -71,7 +71,6 @@ void HomeScreen::set_state_colors(bool running, float grams, const BrewRecipe& r
 
     lv_obj_set_style_arc_color(progress_arc, accent, LV_PART_INDICATOR);
     lv_obj_set_style_border_color(timer_box, accent, 0);
-    lv_obj_set_style_bg_color(flow_dot, accent, 0);
     for (int i = 0; i < 7; i++) {
         if (timer_chars[i]) lv_obj_set_style_text_color(timer_chars[i], accent, 0);
     }
@@ -147,37 +146,32 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     lv_obj_align(progress_arc, LV_ALIGN_TOP_MID, 0, 10);
     lv_arc_set_range(progress_arc, 0, 1000);
     lv_arc_set_value(progress_arc, 0);
-    lv_arc_set_bg_angles(progress_arc, 135, 45);
-    lv_arc_set_rotation(progress_arc, 0);
+    // Full-circle weight track. The white background remains visible at zero,
+    // while the indicator fills clockwise as the active target is approached.
+    lv_arc_set_bg_angles(progress_arc, 0, 360);
+    lv_arc_set_rotation(progress_arc, 135);
     lv_obj_remove_style(progress_arc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(progress_arc, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_arc_width(progress_arc, 9, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(progress_arc, 9, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(progress_arc, lv_color_hex(0x1F2937), LV_PART_MAIN);
+    lv_obj_set_style_arc_width(progress_arc, 7, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(progress_arc, 10, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(progress_arc, COLOR_TEXT, LV_PART_MAIN);
+    lv_obj_set_style_arc_opa(progress_arc, LV_OPA_30, LV_PART_MAIN);
     lv_obj_set_style_arc_color(progress_arc, COLOR_AMBER, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_opa(progress_arc, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_arc_rounded(progress_arc, false, LV_PART_MAIN);
     lv_obj_set_style_arc_rounded(progress_arc, false, LV_PART_INDICATOR);
 
-    weight_target_label = lv_label_create(card);
-    lv_label_set_text(weight_target_label, "0 / 320");
-    lv_obj_set_style_text_color(weight_target_label, COLOR_MUTED, 0);
-    lv_obj_set_style_text_font(weight_target_label, &lv_font_montserrat_24, 0);
-    lv_obj_align(weight_target_label, LV_ALIGN_TOP_MID, 0, 74);
-
     weight_label = lv_label_create(card);
     lv_label_set_text(weight_label, "0.0");
-    lv_obj_set_size(weight_label, 260, 72);
+    lv_obj_set_size(weight_label, 260, 64);
     lv_obj_set_style_text_align(weight_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(weight_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_color(weight_label, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(weight_label, &lv_font_montserrat_48, 0);
-    lv_obj_align(weight_label, LV_ALIGN_TOP_MID, 0, 111);
-
-    grams_label = lv_label_create(card);
-    lv_label_set_text(grams_label, "grams");
-    lv_obj_set_style_text_color(grams_label, COLOR_MUTED, 0);
-    lv_obj_set_style_text_font(grams_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(grams_label, LV_ALIGN_TOP_MID, 0, 177);
+    lv_obj_set_style_text_outline_stroke_color(weight_label, COLOR_TEXT, 0);
+    lv_obj_set_style_text_outline_stroke_width(weight_label, 2, 0);
+    lv_obj_set_style_text_outline_stroke_opa(weight_label, LV_OPA_COVER, 0);
+    lv_obj_align_to(weight_label, progress_arc, LV_ALIGN_CENTER, 0, 0);
 
     ready_label = lv_label_create(card);
     lv_label_set_text(ready_label, "READY");
@@ -212,22 +206,12 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
         lv_obj_align(timer_chars[i], LV_ALIGN_LEFT_MID, timer_x[i] - 11, 0);
     }
 
-    // Flow row.
-    flow_dot = lv_obj_create(card);
-    lv_obj_set_size(flow_dot, 11, 11);
-    lv_obj_align(flow_dot, LV_ALIGN_TOP_MID, -58, 288);
-    lv_obj_set_style_bg_color(flow_dot, COLOR_AMBER, 0);
-    lv_obj_set_style_bg_opa(flow_dot, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(flow_dot, 0, 0);
-    lv_obj_set_style_radius(flow_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_clear_flag(flow_dot, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(flow_dot, LV_OBJ_FLAG_CLICKABLE);
-
-    flow_label = lv_label_create(card);
-    lv_label_set_text(flow_label, "0.0 g/s");
-    lv_obj_set_style_text_color(flow_label, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(flow_label, &lv_font_montserrat_28, 0);
-    lv_obj_align_to(flow_label, flow_dot, LV_ALIGN_OUT_RIGHT_MID, 12, 0);
+    // Recipe hold countdown row.
+    hold_label = lv_label_create(card);
+    lv_label_set_text(hold_label, "HOLD --:--");
+    lv_obj_set_style_text_color(hold_label, COLOR_TEXT, 0);
+    lv_obj_set_style_text_font(hold_label, &lv_font_montserrat_28, 0);
+    lv_obj_align(hold_label, LV_ALIGN_TOP_MID, 0, 277);
 
     tare_button = lv_button_create(card);
     lv_obj_set_size(tare_button, 125, 86);
@@ -280,7 +264,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     set_state_colors(false, 0.0f, recipe);
 }
 
-void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int battery_percent, bool battery_valid, bool charging, bool prebrew_pending, bool ready) {
+void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int battery_percent, bool battery_valid, bool charging, bool prebrew_pending, bool ready) {
     char buf[64];
 
 
@@ -325,7 +309,6 @@ void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool r
 
     snprintf(buf, sizeof(buf), "%.1f", grams);
     lv_label_set_text(weight_label, buf);
-    lv_obj_align(weight_label, LV_ALIGN_TOP_MID, 0, 111);
 
     uint32_t minutes = elapsed_ms / 60000UL;
     uint32_t seconds = (elapsed_ms / 1000UL) % 60UL;
@@ -333,16 +316,20 @@ void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool r
     snprintf(buf, sizeof(buf), "%02lu:%02lu.%lu", minutes, seconds, tenths);
     set_timer_text(buf);
 
-    snprintf(buf, sizeof(buf), "%.1f g/s", flow_gps);
-    lv_label_set_text(flow_label, buf);
+    if (stage.hold_seconds > 0) {
+        const uint32_t remaining = stage.holding
+            ? stage.hold_remaining_seconds
+            : stage.hold_seconds;
+        snprintf(buf, sizeof(buf), "HOLD %02lu:%02lu",
+                 (unsigned long)(remaining / 60UL),
+                 (unsigned long)(remaining % 60UL));
+    } else {
+        snprintf(buf, sizeof(buf), "HOLD --:--");
+    }
+    lv_label_set_text(hold_label, buf);
+    lv_obj_set_style_text_color(hold_label, stage.holding ? COLOR_AMBER : COLOR_TEXT, 0);
 
     float safe_grams = grams < 0 ? 0 : grams;
-    if (stage.recipe_mode) {
-        snprintf(buf, sizeof(buf), "%s  %.0f / %.0f", stage.stage_name, safe_grams, stage.stage_target_g);
-    } else {
-        snprintf(buf, sizeof(buf), "%.0f / %.0f", safe_grams, recipe.water_g);
-    }
-    lv_label_set_text(weight_target_label, buf);
 
     float pct = 0.0f;
     if (stage.recipe_mode && stage.stage_target_g > stage.stage_start_g) {
@@ -367,7 +354,9 @@ void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool r
     } else {
         if (stage.recipe_mode) {
             if (stage.holding) {
-                snprintf(buf, sizeof(buf), "HOLD · %lus", (unsigned long)stage.hold_remaining_seconds);
+                snprintf(buf, sizeof(buf), "stage %u/%u · holding",
+                         (unsigned)(stage.active_index + 1),
+                         (unsigned)stage.stage_count);
             } else {
                 snprintf(buf, sizeof(buf), "stage %u/%u · %d%%", (unsigned)(stage.active_index + 1), (unsigned)stage.stage_count, (int)(pct * 100.0f + 0.5f));
             }

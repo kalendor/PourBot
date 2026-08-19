@@ -3,7 +3,9 @@
 
 namespace {
 constexpr uint32_t kTouchI2CFrequencyHz = 300000;
-constexpr int kTouchI2CTimeoutMs = 5;
+constexpr int kTouchI2CTimeoutMs = 20;
+constexpr uint8_t kErrorsBeforeRelease = 2;
+constexpr uint32_t kMaximumHeldSampleAgeMs = 50;
 }
 
 void TouchDriver::init() {
@@ -32,9 +34,11 @@ void TouchDriver::init() {
     device_config.device_address = HW_TOUCH_I2C_ADDRESS;
     device_config.scl_speed_hz = kTouchI2CFrequencyHz;
 #if DEBUG_SUPPRESS_TOUCH_I2C_ERRORS
+    // This FT3168 board's known-good configuration disables ACK checking in
+    // the ESP-IDF master driver. Enabling it can reject otherwise valid reads
+    // and leave the entire touchscreen unresponsive.
     device_config.flags.disable_ack_check = 1;
 #endif
-
     if (i2c_master_bus_add_device(bus_handle, &device_config, &device_handle) != ESP_OK) {
         disabled = true;
         return;
@@ -58,30 +62,46 @@ void TouchDriver::update() {
 
     uint8_t touch_count = 0;
     uint8_t reg = 0x02;
-    esp_err_t err = i2c_master_transmit_receive(device_handle, &reg, sizeof(reg), &touch_count, 1, kTouchI2CTimeoutMs);
+    esp_err_t err = i2c_master_transmit_receive(
+        device_handle, &reg, sizeof(reg), &touch_count, 1, kTouchI2CTimeoutMs);
     if (err != ESP_OK) {
-        last_touch.pressed = false;
         last_touch.i2c_ok = false;
-        last_touch.touches = 0;
+        if (consecutive_read_errors < UINT8_MAX) ++consecutive_read_errors;
+        if (consecutive_read_errors >= kErrorsBeforeRelease ||
+            millis() - last_good_read_ms > kMaximumHeldSampleAgeMs) {
+            last_touch.pressed = false;
+            last_touch.touches = 0;
+        }
         return;
     }
 
+    consecutive_read_errors = 0;
+    last_good_read_ms = millis();
     last_touch.i2c_ok = true;
     last_touch.touches = touch_count & 0x0F;
 
     if (last_touch.touches > 0) {
         uint8_t buf[4] = {0};
         reg = 0x03;
-        err = i2c_master_transmit_receive(device_handle, &reg, sizeof(reg), buf, sizeof(buf), kTouchI2CTimeoutMs);
+        err = i2c_master_transmit_receive(
+            device_handle, &reg, sizeof(reg), buf, sizeof(buf), kTouchI2CTimeoutMs);
         if (err != ESP_OK) {
-            last_touch.pressed = false;
             last_touch.i2c_ok = false;
+            if (consecutive_read_errors < UINT8_MAX) ++consecutive_read_errors;
+            if (consecutive_read_errors >= kErrorsBeforeRelease ||
+                millis() - last_good_read_ms > kMaximumHeldSampleAgeMs) {
+                last_touch.pressed = false;
+                last_touch.touches = 0;
+            }
             return;
         }
+
+        consecutive_read_errors = 0;
+        last_good_read_ms = millis();
         uint16_t x = ((uint16_t)(buf[0] & 0x0F) << 8) | buf[1];
         uint16_t y = ((uint16_t)(buf[2] & 0x0F) << 8) | buf[3];
-        if (x > HW_DISPLAY_WIDTH_PX) x = HW_DISPLAY_WIDTH_PX;
-        if (y > HW_DISPLAY_HEIGHT_PX) y = HW_DISPLAY_HEIGHT_PX;
+        if (x >= HW_DISPLAY_WIDTH_PX) x = HW_DISPLAY_WIDTH_PX - 1;
+        if (y >= HW_DISPLAY_HEIGHT_PX) y = HW_DISPLAY_HEIGHT_PX - 1;
         last_touch.x = x;
         last_touch.y = y;
         last_touch.pressed = true;
