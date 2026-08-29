@@ -5,7 +5,7 @@ static const lv_color_t COLOR_BG       = lv_color_hex(0x020617);
 static const lv_color_t COLOR_CARD     = lv_color_hex(0x05070B);
 static const lv_color_t COLOR_BORDER   = lv_color_hex(0x1F2937);
 static const lv_color_t COLOR_TEXT     = lv_color_hex(0xF8FAFC);
-static const lv_color_t COLOR_BURNT_ORANGE = lv_color_hex(0xFF6A1C);
+static const lv_color_t COLOR_BURNT_ORANGE = lv_color_hex(0xFA7D09);
 static const lv_color_t COLOR_HOLD_ORANGE  = lv_color_hex(0x8F5436);
 static const lv_color_t COLOR_ORANGE_PRESSED = lv_color_hex(0x78350F);
 static const lv_color_t COLOR_GREEN    = lv_color_hex(0x4ADE80);
@@ -274,7 +274,7 @@ void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const Br
         snprintf(buf, sizeof(buf), "HOLD --:--");
     }
     lv_label_set_text(hold_label, buf);
-    lv_obj_set_style_text_color(hold_label, stage.holding ? COLOR_HOLD_ORANGE : COLOR_TEXT, 0);
+    lv_obj_set_style_text_color(hold_label, COLOR_TEXT, 0);
 
     float safe_grams = grams < 0 ? 0 : grams;
 
