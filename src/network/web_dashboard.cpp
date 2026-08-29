@@ -7,6 +7,7 @@
 #include "config/hardware.h"
 #include "config/version.h"
 #include "storage/brew_log_store.h"
+#include "network/ota_updater.h"
 
 namespace {
 Preferences wifiPrefs;
@@ -90,6 +91,9 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
     server.on("/api/brews/delete", HTTP_POST, [this]() { handle_delete_brew_logs(); });
     server.on("/api/extraction", HTTP_GET, [this]() { handle_extraction_get(); });
     server.on("/api/extraction", HTTP_POST, [this]() { handle_extraction_save(); });
+    server.on("/api/ota/check", HTTP_GET, [this]() { handle_ota_check(); });
+    server.on("/api/ota/status", HTTP_GET, [this]() { handle_ota_status(); });
+    server.on("/api/ota/install", HTTP_POST, [this]() { handle_ota_install(); });
     server.on("/api/tare", HTTP_POST, [this]() { handle_tare(); });
     server.on("/api/start", HTTP_POST, [this]() { handle_start(); });
     server.on("/api/reset", HTTP_POST, [this]() { handle_reset(); });
@@ -142,6 +146,8 @@ void WebDashboard::update() {
         delay(100);
         ESP.restart();
     }
+
+    ota_updater.update();
 }
 
 void WebDashboard::restart_network_services() {
@@ -255,6 +261,37 @@ void WebDashboard::handle_extraction_save() {
     extractionPrefs.putFloat("tds", tds);
     server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"ok\":true}");
+}
+
+void WebDashboard::handle_ota_check() {
+    const String json = ota_updater.check_json();
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    server.send(json.indexOf("\"ok\":true") >= 0 ? 200 : 503, "application/json", json);
+}
+
+void WebDashboard::handle_ota_status() {
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    server.send(200, "application/json", ota_updater.status_json());
+}
+
+void WebDashboard::handle_ota_install() {
+    String error;
+    const bool ok = ota_updater.schedule_install(error);
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    if (ok) {
+        server.send(202, "application/json", "{\"ok\":true,\"message\":\"Update scheduled\"}");
+    } else {
+        String safe;
+        for (size_t i = 0; i < error.length(); ++i) {
+            const char c = error[i];
+            if (c == '\\' || c == '"') safe += '\\';
+            safe += c;
+        }
+        server.send(409, "application/json", "{\"ok\":false,\"message\":\"" + safe + "\"}");
+    }
 }
 
 void WebDashboard::handle_tare() {
@@ -1015,6 +1052,13 @@ String WebDashboard::build_settings_html() const {
     .battery-health.good { background:rgba(22,163,74,.16); color:#86efac; }
     .battery-health.warn { background:rgba(217,119,6,.18); color:#fcd34d; }
     .battery-health.bad { background:rgba(185,28,28,.20); color:#fca5a5; }
+    .update-box { background:#020617; border:1px solid #1e293b; border-radius:18px; padding:14px; }
+    .update-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .update-row span { color:#94a3b8; font-size:13px; font-weight:750; }
+    .update-row strong { font-size:18px; }
+    .update-message { color:#cbd5e1; font-size:13px; line-height:1.4; margin-top:10px; }
+    .update-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+    .update-actions button { width:100%; }
 
     @media (max-width:390px), (max-height:720px) {
       .app { padding:10px 8px; width:96vw; }
@@ -1089,6 +1133,19 @@ String WebDashboard::build_settings_html() const {
       </div>
 
       <div class="section">
+        <h2>Firmware Update</h2>
+        <div class="update-box">
+          <div class="update-row"><span>Installed version</span><strong id="otaCurrent">Checking...</strong></div>
+          <div class="update-message" id="otaMessage">Use Check for Updates when PourBot has Internet access.</div>
+          <div class="update-actions">
+            <button class="secondary" id="otaCheckBtn" onclick="checkForUpdate()">CHECK FOR UPDATES</button>
+            <button class="primary" id="otaInstallBtn" onclick="installUpdate()" disabled>INSTALL UPDATE</button>
+          </div>
+        </div>
+        <div class="hint">The scale downloads updates securely, installs them to its inactive firmware slot, and restarts automatically. Do not remove power during installation.</div>
+      </div>
+
+      <div class="section">
         <h2>Calibration</h2>
         <div class="hint">Empty the scale, tap CAL TARE, place a known weight, enter its grams, then tap CALIBRATE.</div>
         <div class="target" style="margin-top:10px;">
@@ -1121,6 +1178,10 @@ const el = {
   chargeRate: document.getElementById('chargeRate'),
   batteryHealth: document.getElementById('batteryHealth'),
   batteryDetail: document.getElementById('batteryDetail'),
+  otaCurrent: document.getElementById('otaCurrent'),
+  otaMessage: document.getElementById('otaMessage'),
+  otaCheckBtn: document.getElementById('otaCheckBtn'),
+  otaInstallBtn: document.getElementById('otaInstallBtn'),
   meta: document.getElementById('meta')
 };
 let settingsStatusInFlight = false;
@@ -1208,6 +1269,31 @@ function updateBattery(d) {
   el.batteryDetail.textContent = 'ADC ' + raw + ' · sense pin ' + pinVoltage.toFixed(3) + ' V · true charge rate requires a current-sense IC.';
 }
 
+function renderOta(d) {
+  el.otaCurrent.textContent = d.current || '--';
+  const progress = Number(d.progress || 0);
+  el.otaMessage.textContent = d.installing ? ((d.message || 'Installing update') + (progress ? ' · ' + progress + '%' : '')) : (d.message || 'Not checked');
+  el.otaInstallBtn.disabled = !d.available || d.installing;
+  el.otaCheckBtn.disabled = Boolean(d.installing);
+}
+async function refreshOtaStatus() {
+  try { const r=await fetch('/api/ota/status',{cache:'no-store'}); renderOta(await r.json()); } catch(e) {}
+}
+async function checkForUpdate() {
+  el.otaCheckBtn.disabled=true;el.otaMessage.textContent='Checking GitHub for updates...';
+  try { const r=await fetch('/api/ota/check',{cache:'no-store'}),d=await r.json();renderOta(d); }
+  catch(e){el.otaMessage.textContent='Could not contact the update server.';el.otaCheckBtn.disabled=false;}
+}
+async function installUpdate() {
+  if(!confirm('Install the available PourBot update now? Keep the scale powered until it restarts.'))return;
+  el.otaInstallBtn.disabled=true;el.otaCheckBtn.disabled=true;el.otaMessage.textContent='Preparing update...';
+  try { const r=await fetch('/api/ota/install',{method:'POST'}),d=await r.json();
+    if(!r.ok){el.otaMessage.textContent=d.message||'Could not start update.';el.otaCheckBtn.disabled=false;return}
+    el.otaMessage.textContent='Downloading and installing. PourBot will restart automatically...';
+    setTimeout(refreshOtaStatus,1500);
+  } catch(e){el.otaMessage.textContent='Update request failed.';el.otaCheckBtn.disabled=false;}
+}
+
 async function update() {
   if (settingsStatusInFlight) return;
   settingsStatusInFlight = true;
@@ -1219,6 +1305,7 @@ async function update() {
     lastTargetFromScale = target;
     if (document.activeElement !== el.targetInput) el.targetInput.value = Math.round(target);
     updateBattery(d);
+    refreshOtaStatus();
     el.meta.textContent = 'Target ' + Math.round(target) + 'g · Weight ' + Number(d.weight_g || 0).toFixed(1) + 'g · ' + (d.running ? 'BREWING' : 'READY');
   } catch(e) {
     el.meta.textContent = 'Connection lost';

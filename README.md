@@ -86,7 +86,7 @@ Configure settings, calibration, Wi-Fi, and more from your web browser.
 
 ✅ One-Click Firmware Updates
 
-Update directly from Chrome or Edge using ESP Web Tools.
+Install from Chrome or Edge using ESP Web Tools, then apply future releases wirelessly from the PourBot Settings page.
 
 ---
 
@@ -150,6 +150,7 @@ No Arduino IDE required.
 * Wi-Fi
 * Browser configuration
 * Browser firmware updates
+* Wireless OTA firmware updates
 * Built-in calibration
 * Portable battery operation
 
@@ -165,7 +166,6 @@ Future improvements include:
 * Brew history
 * Automatic logging
 * Bluetooth support
-* OTA updates
 * Cloud synchronization
 
 ---

@@ -1,6 +1,6 @@
 {
-  "name": "Pourover Scale",
-  "version": "dev",
+  "name": "PourBot",
+  "version": "v73",
   "new_install_prompt_erase": true,
   "builds": [
     {
@@ -8,7 +8,8 @@
       "parts": [
         { "path": "firmware/bootloader.bin", "offset": 0 },
         { "path": "firmware/partitions.bin", "offset": 32768 },
-        { "path": "firmware/firmware.bin", "offset": 65536 }
+        { "path": "firmware/boot_app0.bin", "offset": 57344 },
+        { "path": "firmware/pourbot-v73.bin", "offset": 65536 }
       ]
     }
   ]

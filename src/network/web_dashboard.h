@@ -66,6 +66,9 @@ private:
     void handle_delete_brew_logs();
     void handle_extraction_get();
     void handle_extraction_save();
+    void handle_ota_check();
+    void handle_ota_status();
+    void handle_ota_install();
     void handle_tare();
     void handle_start();
     void handle_reset();
