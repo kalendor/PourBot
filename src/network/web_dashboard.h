@@ -69,6 +69,9 @@ private:
     void handle_ota_check();
     void handle_ota_status();
     void handle_ota_install();
+    void handle_amoled_colors_get();
+    void handle_amoled_colors_save();
+    void handle_amoled_colors_reset();
     void handle_tare();
     void handle_start();
     void handle_reset();

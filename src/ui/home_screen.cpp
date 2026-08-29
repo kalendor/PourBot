@@ -1,12 +1,11 @@
 #include "home_screen.h"
+#include "amoled_theme.h"
 #include <Arduino.h>
 
 static const lv_color_t COLOR_BG       = lv_color_hex(0x020617);
 static const lv_color_t COLOR_CARD     = lv_color_hex(0x05070B);
 static const lv_color_t COLOR_BORDER   = lv_color_hex(0x1F2937);
 static const lv_color_t COLOR_TEXT     = lv_color_hex(0xF8FAFC);
-static const lv_color_t COLOR_BURNT_ORANGE = lv_color_hex(0xCC5000);
-static const lv_color_t COLOR_STOP_RED     = lv_color_hex(0xD32F2F);
 static const lv_color_t COLOR_ORANGE_PRESSED = lv_color_hex(0x78350F);
 static const lv_color_t COLOR_GREEN    = lv_color_hex(0x4ADE80);
 static constexpr uint32_t START_BUTTON_HOLD_MS = 1000UL;
@@ -62,11 +61,21 @@ void HomeScreen::set_state_colors(bool running, float grams, const BrewRecipe& r
     (void)grams;
     (void)recipe;
 
-    const lv_color_t fill_accent = (stage && stage->holding) ? COLOR_STOP_RED : COLOR_BURNT_ORANGE;
+    const AmoledThemeColors& theme = amoled_theme.colors();
+    const lv_color_t fill_accent = lv_color_hex((stage && stage->holding) ? theme.hold_fill : theme.pour_fill);
     if (progress_panel) lv_obj_set_style_bg_color(progress_panel, fill_accent, LV_PART_INDICATOR);
-    lv_obj_set_style_border_color(timer_box, COLOR_TEXT, 0);
+    if (screen_obj) lv_obj_set_style_bg_color(screen_obj, lv_color_hex(theme.background), 0);
+    if (tare_button) lv_obj_set_style_bg_color(tare_button, lv_color_hex(theme.button), 0);
+    if (start_button) lv_obj_set_style_bg_color(start_button, lv_color_hex(theme.button), 0);
+    if (weight_label) {
+        lv_obj_set_style_text_color(weight_label, lv_color_hex(theme.weight_text), 0);
+        lv_obj_set_style_text_outline_stroke_color(weight_label, lv_color_hex(theme.weight_text), 0);
+    }
+    if (grams_label) lv_obj_set_style_text_color(grams_label, lv_color_hex(theme.weight_text), 0);
+    if (hold_label) lv_obj_set_style_text_color(hold_label, lv_color_hex(theme.timer_text), 0);
+    lv_obj_set_style_border_color(timer_box, lv_color_hex(theme.timer_text), 0);
     for (int i = 0; i < 7; i++) {
-        if (timer_chars[i]) lv_obj_set_style_text_color(timer_chars[i], COLOR_TEXT, 0);
+        if (timer_chars[i]) lv_obj_set_style_text_color(timer_chars[i], lv_color_hex(theme.timer_text), 0);
     }
 }
 
@@ -76,6 +85,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     start_button_pressed_ms = 0;
     start_button_long_reset_sent = false;
     lv_obj_t* scr = lv_screen_active();
+    screen_obj = scr;
     lv_obj_clean(scr);
     lv_obj_set_style_bg_color(scr, COLOR_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
@@ -108,7 +118,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     lv_obj_set_style_border_width(progress_panel, 0, 0);
     lv_obj_set_style_radius(progress_panel, 18, 0);
     lv_obj_set_style_pad_all(progress_panel, 0, 0);
-    lv_obj_set_style_bg_color(progress_panel, COLOR_BURNT_ORANGE, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(progress_panel, lv_color_hex(amoled_theme.colors().pour_fill), LV_PART_INDICATOR);
     // Use the exact solid burnt orange shown on the TARE and START/PAUSE buttons.
     lv_obj_set_style_bg_opa(progress_panel, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(progress_panel, 0, LV_PART_INDICATOR);
@@ -199,7 +209,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     tare_button = lv_button_create(card);
     lv_obj_set_size(tare_button, 125, 86);
     lv_obj_align(tare_button, LV_ALIGN_BOTTOM_LEFT, 8, -10);
-    lv_obj_set_style_bg_color(tare_button, COLOR_BURNT_ORANGE, 0);
+    lv_obj_set_style_bg_color(tare_button, lv_color_hex(amoled_theme.colors().button), 0);
     lv_obj_set_style_bg_opa(tare_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tare_button, 0, 0);
     lv_obj_set_style_radius(tare_button, 29, 0);
@@ -217,7 +227,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     start_button = lv_button_create(card);
     lv_obj_set_size(start_button, 125, 86);
     lv_obj_align(start_button, LV_ALIGN_BOTTOM_RIGHT, -8, -10);
-    lv_obj_set_style_bg_color(start_button, COLOR_BURNT_ORANGE, 0);
+    lv_obj_set_style_bg_color(start_button, lv_color_hex(amoled_theme.colors().button), 0);
     lv_obj_set_style_bg_opa(start_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(start_button, 0, 0);
     lv_obj_set_style_radius(start_button, 29, 0);

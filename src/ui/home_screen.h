@@ -8,6 +8,7 @@ public:
     void create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_event_cb_t start_cb, lv_event_cb_t swipe_up_cb, lv_event_cb_t reset_cb);
     void update(float grams, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int battery_percent, bool battery_valid, bool charging, bool prebrew_pending = false, bool ready = false);
 private:
+    lv_obj_t* screen_obj = nullptr;
     lv_obj_t* card = nullptr;
     lv_obj_t* progress_panel = nullptr;
     lv_obj_t* stage_label = nullptr;

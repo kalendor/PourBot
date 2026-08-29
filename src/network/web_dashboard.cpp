@@ -8,6 +8,7 @@
 #include "config/version.h"
 #include "storage/brew_log_store.h"
 #include "network/ota_updater.h"
+#include "ui/amoled_theme.h"
 
 namespace {
 Preferences wifiPrefs;
@@ -94,6 +95,9 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
     server.on("/api/ota/check", HTTP_GET, [this]() { handle_ota_check(); });
     server.on("/api/ota/status", HTTP_GET, [this]() { handle_ota_status(); });
     server.on("/api/ota/install", HTTP_POST, [this]() { handle_ota_install(); });
+    server.on("/api/amoled_colors", HTTP_GET, [this]() { handle_amoled_colors_get(); });
+    server.on("/api/amoled_colors", HTTP_POST, [this]() { handle_amoled_colors_save(); });
+    server.on("/api/amoled_colors/reset", HTTP_POST, [this]() { handle_amoled_colors_reset(); });
     server.on("/api/tare", HTTP_POST, [this]() { handle_tare(); });
     server.on("/api/start", HTTP_POST, [this]() { handle_start(); });
     server.on("/api/reset", HTTP_POST, [this]() { handle_reset(); });
@@ -292,6 +296,56 @@ void WebDashboard::handle_ota_install() {
         }
         server.send(409, "application/json", "{\"ok\":false,\"message\":\"" + safe + "\"}");
     }
+}
+
+static String amoled_color_hex(uint32_t color) {
+    char value[8];
+    snprintf(value, sizeof(value), "#%06lX", (unsigned long)(color & 0xFFFFFF));
+    return String(value);
+}
+
+static bool parse_amoled_color(const String& value, uint32_t& color) {
+    if (value.length() != 7 || value[0] != '#') return false;
+    for (int i = 1; i < 7; ++i) {
+        if (!isHexadecimalDigit(value[i])) return false;
+    }
+    color = strtoul(value.c_str() + 1, nullptr, 16) & 0xFFFFFF;
+    return true;
+}
+
+void WebDashboard::handle_amoled_colors_get() {
+    const AmoledThemeColors& colors = amoled_theme.colors();
+    String json = "{\"ok\":true";
+    json += ",\"button\":\"" + amoled_color_hex(colors.button) + "\"";
+    json += ",\"pour_fill\":\"" + amoled_color_hex(colors.pour_fill) + "\"";
+    json += ",\"hold_fill\":\"" + amoled_color_hex(colors.hold_fill) + "\"";
+    json += ",\"weight_text\":\"" + amoled_color_hex(colors.weight_text) + "\"";
+    json += ",\"timer_text\":\"" + amoled_color_hex(colors.timer_text) + "\"";
+    json += ",\"background\":\"" + amoled_color_hex(colors.background) + "\"}";
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "application/json", json);
+}
+
+void WebDashboard::handle_amoled_colors_save() {
+    AmoledThemeColors colors = amoled_theme.colors();
+    struct ColorField { const char* name; uint32_t* target; } fields[] = {
+        {"button", &colors.button}, {"pour_fill", &colors.pour_fill},
+        {"hold_fill", &colors.hold_fill}, {"weight_text", &colors.weight_text},
+        {"timer_text", &colors.timer_text}, {"background", &colors.background}
+    };
+    for (ColorField& field : fields) {
+        if (!server.hasArg(field.name) || !parse_amoled_color(server.arg(field.name), *field.target)) {
+            server.send(400, "application/json", "{\"ok\":false,\"message\":\"Invalid color value\"}");
+            return;
+        }
+    }
+    amoled_theme.set(colors);
+    server.send(200, "application/json", "{\"ok\":true,\"message\":\"AMOLED colors saved\"}");
+}
+
+void WebDashboard::handle_amoled_colors_reset() {
+    amoled_theme.reset();
+    server.send(200, "application/json", "{\"ok\":true,\"message\":\"Default AMOLED colors restored\"}");
 }
 
 void WebDashboard::handle_tare() {
@@ -1052,6 +1106,11 @@ String WebDashboard::build_settings_html() const {
     .battery-health.good { background:rgba(22,163,74,.16); color:#86efac; }
     .battery-health.warn { background:rgba(217,119,6,.18); color:#fcd34d; }
     .battery-health.bad { background:rgba(185,28,28,.20); color:#fca5a5; }
+    .color-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .color-field { padding:11px; border:1px solid #1e293b; border-radius:16px; background:#020617; }
+    .color-field label { margin-bottom:8px; }
+    .color-field input[type=color] { width:100%; height:44px; min-height:44px; padding:3px; border-radius:11px; cursor:pointer; }
+    .color-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
     .update-box { background:#020617; border:1px solid #1e293b; border-radius:18px; padding:14px; }
     .update-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .update-row span { color:#94a3b8; font-size:13px; font-weight:750; }
@@ -1087,6 +1146,23 @@ String WebDashboard::build_settings_html() const {
         </div>
         <div class="battery-health" id="batteryHealth">Reading power monitor...</div>
         <div class="hint" id="batteryDetail">This board senses voltage but has no current sensor, so charging current and watts cannot be measured.</div>
+      </div>
+
+      <div class="section">
+        <h2>AMOLED Colors</h2>
+        <div class="color-grid">
+          <div class="color-field"><label for="colorButton">Buttons</label><input id="colorButton" type="color" value="#CC5000"></div>
+          <div class="color-field"><label for="colorPour">Pour fill</label><input id="colorPour" type="color" value="#CC5000"></div>
+          <div class="color-field"><label for="colorHold">STOP fill</label><input id="colorHold" type="color" value="#D32F2F"></div>
+          <div class="color-field"><label for="colorWeight">Weight text</label><input id="colorWeight" type="color" value="#F8FAFC"></div>
+          <div class="color-field"><label for="colorTimer">Timer text</label><input id="colorTimer" type="color" value="#F8FAFC"></div>
+          <div class="color-field"><label for="colorBackground">Background</label><input id="colorBackground" type="color" value="#020617"></div>
+        </div>
+        <div class="color-actions">
+          <button class="primary" onclick="saveAmoledColors()">APPLY COLORS</button>
+          <button class="secondary" onclick="resetAmoledColors()">RESTORE DEFAULTS</button>
+        </div>
+        <div class="hint" id="colorMessage">Colors are saved on PourBot and apply to the AMOLED immediately.</div>
       </div>
 
       <div class="section">
@@ -1130,6 +1206,13 @@ const el = {
   chargeRate: document.getElementById('chargeRate'),
   batteryHealth: document.getElementById('batteryHealth'),
   batteryDetail: document.getElementById('batteryDetail'),
+  colorButton: document.getElementById('colorButton'),
+  colorPour: document.getElementById('colorPour'),
+  colorHold: document.getElementById('colorHold'),
+  colorWeight: document.getElementById('colorWeight'),
+  colorTimer: document.getElementById('colorTimer'),
+  colorBackground: document.getElementById('colorBackground'),
+  colorMessage: document.getElementById('colorMessage'),
   otaCurrent: document.getElementById('otaCurrent'),
   otaMessage: document.getElementById('otaMessage'),
   otaProgress: document.getElementById('otaProgress'),
@@ -1192,6 +1275,31 @@ function updateBattery(d) {
   }
 
   el.batteryDetail.textContent = 'ADC ' + raw + ' · sense pin ' + pinVoltage.toFixed(3) + ' V · true charge rate requires a current-sense IC.';
+}
+
+function renderAmoledColors(d) {
+  if (!d || !d.ok) return;
+  el.colorButton.value = d.button;
+  el.colorPour.value = d.pour_fill;
+  el.colorHold.value = d.hold_fill;
+  el.colorWeight.value = d.weight_text;
+  el.colorTimer.value = d.timer_text;
+  el.colorBackground.value = d.background;
+}
+async function loadAmoledColors() {
+  try { const r=await fetch('/api/amoled_colors',{cache:'no-store'}); renderAmoledColors(await r.json()); }
+  catch(e) { el.colorMessage.textContent='Could not load AMOLED colors.'; }
+}
+async function saveAmoledColors() {
+  const q = new URLSearchParams({button:el.colorButton.value,pour_fill:el.colorPour.value,hold_fill:el.colorHold.value,weight_text:el.colorWeight.value,timer_text:el.colorTimer.value,background:el.colorBackground.value});
+  el.colorMessage.textContent='Saving colors...';
+  try { const r=await fetch('/api/amoled_colors?'+q.toString(),{method:'POST'}),d=await r.json(); el.colorMessage.textContent=d.message||'Colors saved.'; }
+  catch(e) { el.colorMessage.textContent='Could not save AMOLED colors.'; }
+}
+async function resetAmoledColors() {
+  if(!confirm('Restore the default AMOLED colors?'))return;
+  try { const r=await fetch('/api/amoled_colors/reset',{method:'POST'}),d=await r.json(); el.colorMessage.textContent=d.message||'Defaults restored.'; await loadAmoledColors(); }
+  catch(e) { el.colorMessage.textContent='Could not restore default colors.'; }
 }
 
 function renderOta(d) {
@@ -1266,6 +1374,7 @@ async function calibrateScale() {
   update();
 }
 window.addEventListener('pagehide', stopSettingsPolling);
+loadAmoledColors();
 pollSettings();
 </script>
 </body>

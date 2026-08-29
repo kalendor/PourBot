@@ -3,6 +3,7 @@
 #include "config/hardware.h"
 #include "config/version.h"
 #include "storage/brew_log_store.h"
+#include "ui/amoled_theme.h"
 
 App* g_app = nullptr;
 
@@ -38,6 +39,7 @@ void App::begin() {
     Serial.println(FIRMWARE_NAME " " FIRMWARE_VERSION " - hold cue amber pulse");
 
     settings.begin();
+    amoled_theme.begin();
     power.begin();
     const float default_calibration_factor = -7050.0f;
     const float saved_calibration_factor = settings.load_calibration_factor(default_calibration_factor);
