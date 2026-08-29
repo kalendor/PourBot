@@ -1,7 +1,7 @@
 {
   "name": "PourBot",
   "version": "v73",
-  "new_install_prompt_erase": true,
+  "new_install_prompt_erase": false,
   "builds": [
     {
       "chipFamily": "ESP32-S3",

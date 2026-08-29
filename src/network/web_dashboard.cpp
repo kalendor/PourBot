@@ -611,7 +611,7 @@ String WebDashboard::build_html() const {
     .battery:after { content:""; position:absolute; right:-5px; top:4px; width:3px; height:6px; border-radius:1px; background:currentColor; }
     .battery-fill { display:block; height:100%; width:0%; border-radius:1px; background:currentColor; transition:width .18s linear; }
     .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:3px; margin:0 0 16px; padding:3px; border:1px solid var(--border); border-radius:14px; background:rgba(2,6,23,.58); }
-    .tab { display:flex; align-items:center; justify-content:center; min-width:0; min-height:32px; padding:7px 3px; border-radius:10px; color:var(--dim); text-decoration:none; font-size:11px; font-weight:850; letter-spacing:.02em; touch-action:manipulation; }
+    .tab { display:flex; align-items:center; justify-content:center; min-width:0; min-height:32px; padding:7px 4px; border-radius:10px; color:var(--dim); text-decoration:none; font-size:10px; font-weight:850; letter-spacing:0; white-space:nowrap; overflow:hidden; touch-action:manipulation; }
     .tab.active { color:#fff; background:#334155; box-shadow:0 3px 12px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06); }
     .dial {
       position:relative;
@@ -747,7 +747,7 @@ String WebDashboard::build_html() const {
       .controls { margin-top:0; }
       button { min-height:42px; }
       .target input { min-height:42px; }
-      .tab { min-height:30px; padding:6px 3px; }
+      .tab { min-height:30px; padding:6px 4px; }
       .meta { display:none; }
     }
 
@@ -755,7 +755,7 @@ String WebDashboard::build_html() const {
       .card { padding:9px 12px; border-radius:24px; }
       .status { margin-bottom:4px; font-size:12px; }
       .tabs { margin-bottom:8px; }
-      .tab { min-height:27px; padding:5px 2px; font-size:10px; }
+      .tab { min-height:27px; padding:5px 4px; font-size:10px; }
       .dial { width:min(260px, 68vw); margin:4px auto 8px; }
       .dial:before { inset:7px; }
       .readout { transform:translateY(3px); }
@@ -1023,7 +1023,7 @@ String WebDashboard::build_settings_html() const {
     .card { width:100%; background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,13,24,.98)); border:1px solid #1e293b; border-radius:28px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
     .top { margin-bottom:18px; }
     .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid #1e293b; border-radius:16px; background:rgba(2,6,23,.58); }
-    .tab { color:#64748b; text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:12px; font-weight:850; touch-action:manipulation; }
+    .tab { min-width:0; color:#64748b; text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:11px; font-weight:850; letter-spacing:0; white-space:nowrap; overflow:hidden; touch-action:manipulation; }
     .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     .section { margin-top:18px; padding-top:18px; border-top:1px solid #1e293b; }
     .section:first-of-type { border-top:0; padding-top:0; }
@@ -1391,7 +1391,7 @@ String WebDashboard::build_wifi_html() const {
     }
     .top { margin-bottom:18px; }
     .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid var(--border); border-radius:16px; background:rgba(2,6,23,.58); }
-    .tab { color:var(--dim); text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:12px; font-weight:850; }
+    .tab { min-width:0; color:var(--dim); text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:11px; font-weight:850; letter-spacing:0; white-space:nowrap; overflow:hidden; }
     .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     h1 { margin:0; font-size:28px; letter-spacing:-.03em; }
     h2 { margin:20px 0 12px; font-size:13px; color:var(--muted); letter-spacing:.10em; text-transform:uppercase; }
@@ -1471,7 +1471,7 @@ String WebDashboard::build_wifi_html() const {
       .card{border-radius:24px;padding:17px 13px;}
       h1{font-size:25px;}
       input,button{min-height:50px;font-size:16px;padding:12px 11px;}
-      .tab{padding:9px 2px;font-size:11px;}
+      .tab{padding:9px 4px;font-size:10px;}
       .status{padding:13px;}
     }
   </style>
@@ -1578,7 +1578,7 @@ String WebDashboard::build_analytics_html() const {
     .app { width:min(540px,100%); margin:0 auto; padding:16px; }
     .card { background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(8,13,24,.98)); border:1px solid var(--border); border-radius:30px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
     .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid var(--border); border-radius:16px; background:rgba(2,6,23,.58); }
-    .tab { min-width:0; color:var(--dim); text-align:center; text-decoration:none; padding:10px 2px; border-radius:12px; font-size:11px; font-weight:850; touch-action:manipulation; }
+    .tab { min-width:0; color:var(--dim); text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:10px; font-weight:850; letter-spacing:0; white-space:nowrap; overflow:hidden; touch-action:manipulation; }
     .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     h1 { margin:0 0 6px; font-size:24px; }
     h2 { margin:20px 0 10px; color:var(--muted); font-size:13px; letter-spacing:.09em; text-transform:uppercase; }
@@ -1608,7 +1608,7 @@ String WebDashboard::build_analytics_html() const {
     button.primary { background:#16a34a; }
     button.danger { width:100%; margin-top:8px; background:#b91c1c; }
     .foot { margin-top:12px; color:var(--dim); font-size:11px; line-height:1.45; }
-    @media(max-width:390px){.app{padding:10px 8px}.card{padding:18px 12px;border-radius:24px}.tab{font-size:10px;padding:9px 1px}.stats{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:1fr}.results{grid-template-columns:1fr 1fr}.history{grid-template-columns:1fr 1fr}.history select{grid-column:1/-1}canvas{height:190px}}
+    @media(max-width:390px){.app{padding:10px 8px}.card{padding:18px 12px;border-radius:24px}.tab{font-size:10px;padding:9px 4px}.stats{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:1fr}.results{grid-template-columns:1fr 1fr}.history{grid-template-columns:1fr 1fr}.history select{grid-column:1/-1}canvas{height:190px}}
   </style>
 </head>
 <body>
@@ -1753,7 +1753,7 @@ String WebDashboard::build_recipes_html() const {
     .card { background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,13,24,.98)); border:1px solid #1e293b; border-radius:30px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
     .top { margin-bottom:16px; }
     .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid #1e293b; border-radius:16px; background:rgba(2,6,23,.58); }
-    .tab { color:#64748b; text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:12px; font-weight:850; }
+    .tab { min-width:0; color:#64748b; text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:11px; font-weight:850; letter-spacing:0; white-space:nowrap; overflow:hidden; }
     .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     h1 { margin:0; font-size:24px; }
     label { display:block; color:#94a3b8; font-size:12px; font-weight:800; margin:0 0 6px; letter-spacing:.05em; text-transform:uppercase; }
