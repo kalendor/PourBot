@@ -1057,6 +1057,8 @@ String WebDashboard::build_settings_html() const {
     .update-row span { color:#94a3b8; font-size:13px; font-weight:750; }
     .update-row strong { font-size:18px; }
     .update-message { color:#cbd5e1; font-size:13px; line-height:1.4; margin-top:10px; }
+    .update-progress { display:none; height:10px; margin-top:12px; overflow:hidden; border-radius:999px; background:#1e293b; }
+    .update-progress-fill { width:0; height:100%; border-radius:inherit; background:#d49a32; transition:width .25s ease; }
     .update-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
     .update-actions button { width:100%; }
 
@@ -1137,6 +1139,7 @@ String WebDashboard::build_settings_html() const {
         <div class="update-box">
           <div class="update-row"><span>Installed version</span><strong id="otaCurrent">Checking...</strong></div>
           <div class="update-message" id="otaMessage">Use Check for Updates when PourBot has Internet access.</div>
+          <div class="update-progress" id="otaProgress"><div class="update-progress-fill" id="otaProgressFill"></div></div>
           <div class="update-actions">
             <button class="secondary" id="otaCheckBtn" onclick="checkForUpdate()">CHECK FOR UPDATES</button>
             <button class="primary" id="otaInstallBtn" onclick="installUpdate()" disabled>INSTALL UPDATE</button>
@@ -1180,6 +1183,8 @@ const el = {
   batteryDetail: document.getElementById('batteryDetail'),
   otaCurrent: document.getElementById('otaCurrent'),
   otaMessage: document.getElementById('otaMessage'),
+  otaProgress: document.getElementById('otaProgress'),
+  otaProgressFill: document.getElementById('otaProgressFill'),
   otaCheckBtn: document.getElementById('otaCheckBtn'),
   otaInstallBtn: document.getElementById('otaInstallBtn'),
   meta: document.getElementById('meta')
@@ -1189,6 +1194,9 @@ let lastTargetFromScale = 320;
 let settingsStatusAbort = null;
 let settingsStatusTimer = null;
 let settingsPollingStopped = false;
+let otaTargetVersion = '';
+let otaPendingVersion = sessionStorage.getItem('pourbotOtaPending') || '';
+let otaSuccessVersion = '';
 
 function stopSettingsPolling() {
   settingsPollingStopped = true;
@@ -1272,7 +1280,18 @@ function updateBattery(d) {
 function renderOta(d) {
   el.otaCurrent.textContent = d.current || '--';
   const progress = Number(d.progress || 0);
-  el.otaMessage.textContent = d.installing ? ((d.message || 'Installing update') + (progress ? ' · ' + progress + '%' : '')) : (d.message || 'Not checked');
+  otaTargetVersion = d.latest || otaTargetVersion;
+  if (otaPendingVersion && d.current === otaPendingVersion) {
+    otaSuccessVersion = d.current;
+    otaPendingVersion = '';
+    sessionStorage.removeItem('pourbotOtaPending');
+  }
+  const showProgress = Boolean(d.installing || d.success || otaSuccessVersion);
+  el.otaProgress.style.display = showProgress ? 'block' : 'none';
+  el.otaProgressFill.style.width = (d.success || otaSuccessVersion ? 100 : progress) + '%';
+  if (otaSuccessVersion) el.otaMessage.textContent = 'Update installed successfully. PourBot is now running ' + otaSuccessVersion + '.';
+  else if (d.success) el.otaMessage.textContent = 'Update installed successfully. Restarting PourBot...';
+  else el.otaMessage.textContent = d.installing ? ((d.message || 'Installing update') + ' · ' + progress + '%') : (d.message || 'Not checked');
   el.otaInstallBtn.disabled = !d.available || d.installing;
   el.otaCheckBtn.disabled = Boolean(d.installing);
 }
@@ -1289,6 +1308,7 @@ async function installUpdate() {
   el.otaInstallBtn.disabled=true;el.otaCheckBtn.disabled=true;el.otaMessage.textContent='Preparing update...';
   try { const r=await fetch('/api/ota/install',{method:'POST'}),d=await r.json();
     if(!r.ok){el.otaMessage.textContent=d.message||'Could not start update.';el.otaCheckBtn.disabled=false;return}
+    if(otaTargetVersion){otaPendingVersion=otaTargetVersion;sessionStorage.setItem('pourbotOtaPending',otaTargetVersion);}
     el.otaMessage.textContent='Downloading and installing. PourBot will restart automatically...';
     setTimeout(refreshOtaStatus,1500);
   } catch(e){el.otaMessage.textContent='Update request failed.';el.otaCheckBtn.disabled=false;}

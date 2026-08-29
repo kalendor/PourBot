@@ -154,6 +154,7 @@ String OtaUpdater::status_json() const {
     json += ",\"latest\":\"" + json_escape(latest_version) + "\"";
     json += ",\"available\":" + String(update_available ? "true" : "false");
     json += ",\"installing\":" + String((installing || install_pending) ? "true" : "false");
+    json += ",\"success\":" + String(install_succeeded ? "true" : "false");
     json += ",\"progress\":" + String(progress_percent);
     json += ",\"message\":\"" + json_escape(message) + "\"}";
     return json;
@@ -170,6 +171,7 @@ bool OtaUpdater::schedule_install(String& error) {
         return false;
     }
     install_pending = true;
+    install_succeeded = false;
     install_at_ms = millis() + 1000;
     progress_percent = 0;
     message = String("Preparing ") + latest_version;
@@ -177,30 +179,48 @@ bool OtaUpdater::schedule_install(String& error) {
 }
 
 void OtaUpdater::update() {
-    if (install_pending && (int32_t)(millis() - install_at_ms) >= 0) perform_install();
+    if (reboot_pending && (int32_t)(millis() - reboot_at_ms) >= 0) ESP.restart();
+    if (!install_pending || (int32_t)(millis() - install_at_ms) < 0) return;
+
+    install_pending = false;
+    installing = true;
+    message = String("Downloading ") + latest_version;
+    if (xTaskCreatePinnedToCore(install_task, "pourbot_ota", 12288, this, 1, nullptr, 0) != pdPASS) {
+        installing = false;
+        message = "Could not start update task";
+    }
+}
+
+void OtaUpdater::install_task(void* context) {
+    static_cast<OtaUpdater*>(context)->perform_install();
+    vTaskDelete(nullptr);
 }
 
 void OtaUpdater::perform_install() {
-    install_pending = false;
-    installing = true;
-    message = String("Installing ") + latest_version;
     Serial.printf("OTA: downloading %s\n", firmware_url.c_str());
 
     WiFiClientSecure client;
     client.setCACert(kRootCa);
     client.setTimeout(30000);
-    httpUpdate.rebootOnUpdate(true);
+    httpUpdate.rebootOnUpdate(false);
     httpUpdate.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     httpUpdate.onProgress([this](int current, int total) {
         if (total > 0) progress_percent = constrain((current * 100) / total, 0, 100);
     });
 
     const t_httpUpdate_return result = httpUpdate.update(client, firmware_url);
-    installing = false;
     if (result == HTTP_UPDATE_FAILED) {
         message = String("Update failed: ") + httpUpdate.getLastErrorString();
         Serial.printf("OTA: %s\n", message.c_str());
     } else if (result == HTTP_UPDATE_NO_UPDATES) {
         message = "No update was installed";
+    } else if (result == HTTP_UPDATE_OK) {
+        progress_percent = 100;
+        install_succeeded = true;
+        update_available = false;
+        message = "Update installed successfully; restarting shortly";
+        reboot_pending = true;
+        reboot_at_ms = millis() + 7000;
     }
+    installing = false;
 }
