@@ -5,9 +5,10 @@ static const lv_color_t COLOR_BG       = lv_color_hex(0x020617);
 static const lv_color_t COLOR_CARD     = lv_color_hex(0x05070B);
 static const lv_color_t COLOR_BORDER   = lv_color_hex(0x1F2937);
 static const lv_color_t COLOR_TEXT     = lv_color_hex(0xF8FAFC);
-static const lv_color_t COLOR_AMBER    = lv_color_hex(0xFDBA4B);
+static const lv_color_t COLOR_BURNT_ORANGE = lv_color_hex(0xA9470A);
+static const lv_color_t COLOR_HOLD_ORANGE  = lv_color_hex(0x8F5436);
+static const lv_color_t COLOR_ORANGE_PRESSED = lv_color_hex(0x78350F);
 static const lv_color_t COLOR_GREEN    = lv_color_hex(0x4ADE80);
-static const lv_color_t COLOR_RED      = lv_color_hex(0xEF4444);
 static constexpr uint32_t START_BUTTON_HOLD_MS = 1000UL;
 
 void HomeScreen::start_button_event_router(lv_event_t* e) {
@@ -61,9 +62,8 @@ void HomeScreen::set_state_colors(bool running, float grams, const BrewRecipe& r
     (void)grams;
     (void)recipe;
 
-    // A recipe hold is distinct from a manually paused shot: show its fill in
-    // red until the next pour phase begins, then return to the normal amber.
-    const lv_color_t fill_accent = (stage && stage->holding) ? COLOR_RED : COLOR_AMBER;
+    // Keep holds visually distinct without the harsh red used previously.
+    const lv_color_t fill_accent = (stage && stage->holding) ? COLOR_HOLD_ORANGE : COLOR_BURNT_ORANGE;
     if (progress_panel) lv_obj_set_style_bg_color(progress_panel, fill_accent, LV_PART_INDICATOR);
     lv_obj_set_style_border_color(timer_box, COLOR_TEXT, 0);
     for (int i = 0; i < 7; i++) {
@@ -109,8 +109,8 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     lv_obj_set_style_border_width(progress_panel, 0, 0);
     lv_obj_set_style_radius(progress_panel, 18, 0);
     lv_obj_set_style_pad_all(progress_panel, 0, 0);
-    lv_obj_set_style_bg_color(progress_panel, COLOR_AMBER, LV_PART_INDICATOR);
-    // Use the exact solid amber shown on the TARE and START/PAUSE buttons.
+    lv_obj_set_style_bg_color(progress_panel, COLOR_BURNT_ORANGE, LV_PART_INDICATOR);
+    // Use the exact solid burnt orange shown on the TARE and START/PAUSE buttons.
     lv_obj_set_style_bg_opa(progress_panel, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(progress_panel, 0, LV_PART_INDICATOR);
     lv_obj_set_style_border_width(progress_panel, 0, LV_PART_INDICATOR);
@@ -200,29 +200,29 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     tare_button = lv_button_create(card);
     lv_obj_set_size(tare_button, 125, 86);
     lv_obj_align(tare_button, LV_ALIGN_BOTTOM_LEFT, 8, -10);
-    lv_obj_set_style_bg_color(tare_button, COLOR_AMBER, 0);
+    lv_obj_set_style_bg_color(tare_button, COLOR_BURNT_ORANGE, 0);
     lv_obj_set_style_bg_opa(tare_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tare_button, 0, 0);
     lv_obj_set_style_radius(tare_button, 29, 0);
-    lv_obj_set_style_bg_color(tare_button, lv_color_hex(0xD97706), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(tare_button, COLOR_ORANGE_PRESSED, LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(tare_button, 0, 0);
     lv_obj_clear_flag(tare_button, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(tare_button, tare_cb, LV_EVENT_CLICKED, nullptr);
 
     lv_obj_t* tare_text = lv_label_create(tare_button);
     lv_label_set_text(tare_text, "TARE");
-    lv_obj_set_style_text_color(tare_text, COLOR_BG, 0);
+    lv_obj_set_style_text_color(tare_text, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(tare_text, &lv_font_montserrat_24, 0);
     lv_obj_center(tare_text);
 
     start_button = lv_button_create(card);
     lv_obj_set_size(start_button, 125, 86);
     lv_obj_align(start_button, LV_ALIGN_BOTTOM_RIGHT, -8, -10);
-    lv_obj_set_style_bg_color(start_button, COLOR_AMBER, 0);
+    lv_obj_set_style_bg_color(start_button, COLOR_BURNT_ORANGE, 0);
     lv_obj_set_style_bg_opa(start_button, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(start_button, 0, 0);
     lv_obj_set_style_radius(start_button, 29, 0);
-    lv_obj_set_style_bg_color(start_button, lv_color_hex(0xD97706), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(start_button, COLOR_ORANGE_PRESSED, LV_STATE_PRESSED);
     lv_obj_set_style_shadow_width(start_button, 0, 0);
     lv_obj_clear_flag(start_button, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(start_button, start_button_event_router, LV_EVENT_PRESSED, this);
@@ -233,7 +233,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
 
     start_button_label = lv_label_create(start_button);
     lv_label_set_text(start_button_label, "START");
-    lv_obj_set_style_text_color(start_button_label, COLOR_BG, 0);
+    lv_obj_set_style_text_color(start_button_label, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(start_button_label, &lv_font_montserrat_24, 0);
     lv_obj_center(start_button_label);
 
@@ -274,14 +274,15 @@ void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const Br
         snprintf(buf, sizeof(buf), "HOLD --:--");
     }
     lv_label_set_text(hold_label, buf);
-    lv_obj_set_style_text_color(hold_label, stage.holding ? COLOR_AMBER : COLOR_TEXT, 0);
+    lv_obj_set_style_text_color(hold_label, stage.holding ? COLOR_HOLD_ORANGE : COLOR_TEXT, 0);
 
     float safe_grams = grams < 0 ? 0 : grams;
 
+    const bool brew_active = running || elapsed_ms > 0;
     float pct = 0.0f;
-    if (stage.recipe_mode && stage.stage_target_g > stage.stage_start_g) {
+    if (brew_active && stage.recipe_mode && stage.stage_target_g > stage.stage_start_g) {
         pct = constrain((safe_grams - stage.stage_start_g) / (stage.stage_target_g - stage.stage_start_g), 0.0f, 1.0f);
-    } else if (recipe.water_g > 0.0f) pct = constrain(safe_grams / recipe.water_g, 0.0f, 1.0f);
+    } else if (brew_active && recipe.water_g > 0.0f) pct = constrain(safe_grams / recipe.water_g, 0.0f, 1.0f);
     const int fill_value = (int)(pct * 1000.0f + 0.5f);
     if (progress_panel) lv_bar_set_value(progress_panel, fill_value, LV_ANIM_OFF);
 
@@ -293,7 +294,6 @@ void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const Br
     if (start_button_label) {
         lv_label_set_text(start_button_label, running ? "PAUSE" : "START");
     }
-    const bool brew_active = running || elapsed_ms > 0;
     if (stage_label) {
         if (brew_active) lv_obj_clear_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
