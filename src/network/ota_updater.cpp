@@ -71,12 +71,31 @@ String OtaUpdater::json_value(const String& json, const char* key) {
     return end < 0 ? "" : json.substring(pos + 1, end);
 }
 
-int OtaUpdater::version_number(const String& version) {
-    String digits;
-    for (size_t i = 0; i < version.length(); ++i) {
-        if (isDigit(version[i])) digits += version[i];
+int OtaUpdater::compare_versions(const String& left, const String& right) {
+    // Legacy vNN releases are intentionally below the 1.1.0 semantic-version
+    // baseline so installed v73/v74 units can migrate into the new scheme.
+    const bool left_semver = left.indexOf('.') >= 0;
+    const bool right_semver = right.indexOf('.') >= 0;
+    if (left_semver != right_semver) return left_semver ? 1 : -1;
+
+    int left_pos = left.startsWith("v") ? 1 : 0;
+    int right_pos = right.startsWith("v") ? 1 : 0;
+    for (int segment = 0; segment < 3; ++segment) {
+        int left_value = 0;
+        int right_value = 0;
+        while (left_pos < static_cast<int>(left.length()) && isDigit(left[left_pos])) {
+            left_value = left_value * 10 + (left[left_pos++] - '0');
+        }
+        while (right_pos < static_cast<int>(right.length()) && isDigit(right[right_pos])) {
+            right_value = right_value * 10 + (right[right_pos++] - '0');
+        }
+        if (left_value != right_value) return left_value > right_value ? 1 : -1;
+        while (left_pos < static_cast<int>(left.length()) && left[left_pos] != '.') ++left_pos;
+        while (right_pos < static_cast<int>(right.length()) && right[right_pos] != '.') ++right_pos;
+        if (left_pos < static_cast<int>(left.length())) ++left_pos;
+        if (right_pos < static_cast<int>(right.length())) ++right_pos;
     }
-    return digits.toInt();
+    return 0;
 }
 
 bool OtaUpdater::fetch_manifest(String& error) {
@@ -113,7 +132,7 @@ bool OtaUpdater::fetch_manifest(String& error) {
         error = "Update metadata is invalid";
         return false;
     }
-    update_available = version_number(latest_version) > version_number(FIRMWARE_VERSION);
+    update_available = compare_versions(latest_version, FIRMWARE_VERSION) > 0;
     message = update_available ? String("Update ") + latest_version + " is available" : "PourBot is up to date";
     return true;
 }

@@ -184,6 +184,16 @@ Whether it's:
 
 feel free to submit a Pull Request.
 
+## Firmware Versioning
+
+PourBot uses semantic versions in the form `major.minor.patch`.
+
+* Increment `patch` for each normal software change.
+* Increment `minor` for a larger feature release and reset `patch` to zero.
+* Increment `major` for a major or compatibility-changing release and reset the other segments to zero.
+
+Every published version must update `src/config/version.h`, `docs/manifest.json`, `docs/ota.json`, and the versioned firmware binary in `docs/firmware`.
+
 ---
 
 # License

@@ -22,7 +22,7 @@ private:
     bool fetch_manifest(String& error);
     void perform_install();
     static String json_value(const String& json, const char* key);
-    static int version_number(const String& version);
+    static int compare_versions(const String& left, const String& right);
     static String json_escape(const String& value);
 };
 
