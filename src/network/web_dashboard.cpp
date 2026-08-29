@@ -1266,7 +1266,6 @@ async function calibrateScale() {
   update();
 }
 window.addEventListener('pagehide', stopSettingsPolling);
-ratioChanged();
 pollSettings();
 </script>
 </body>
