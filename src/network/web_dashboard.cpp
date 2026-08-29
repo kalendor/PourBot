@@ -484,8 +484,13 @@ String WebDashboard::build_html() const {
       place-items:center;
       --ring: var(--amber);
       --ringGlow: rgba(251,191,36,.10);
+      /* Keep the lower 60-degree gap open and grow the colored segment
+         counterclockwise from 5 o'clock toward 7 o'clock. */
       background:
-        conic-gradient(from 210deg, var(--ring) 0deg, var(--ring) var(--arc,0deg), var(--track) var(--arc,0deg), var(--track) 300deg, transparent 300deg 360deg);
+        conic-gradient(from 150deg,
+          transparent 0deg 60deg,
+          var(--track) 60deg calc(360deg - var(--arc,0deg)),
+          var(--ring) calc(360deg - var(--arc,0deg)) 360deg);
       filter:drop-shadow(0 0 24px var(--ringGlow));
     }
     .dial.complete {

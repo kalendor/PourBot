@@ -16,7 +16,7 @@ constexpr uint8_t kCalibrationTareSamples = 12;
 
 static void tare_event_cb(lv_event_t*) { if (g_app) g_app->tare(); }
 static void start_event_cb(lv_event_t*) { if (g_app) g_app->toggle_brew(); }
-static void reset_event_cb(lv_event_t*) { if (g_app) g_app->reset_brew(); }
+static void reset_and_tare_event_cb(lv_event_t*) { if (g_app) g_app->reset_brew_and_tare(); }
 static void show_settings_event_cb(lv_event_t*) { if (g_app) g_app->show_settings(); }
 static void show_cal_event_cb(lv_event_t*) { if (g_app) g_app->show_calibration(); }
 static void show_home_event_cb(lv_event_t*) { if (g_app) g_app->show_home(); }
@@ -53,7 +53,7 @@ void App::begin() {
 
 void App::show_home() {
     screen = Screen::Home;
-    home.create(recipe, tare_event_cb, start_event_cb, show_settings_event_cb, reset_event_cb);
+    home.create(recipe, tare_event_cb, start_event_cb, show_settings_event_cb, reset_and_tare_event_cb);
 }
 
 void App::show_settings() {
@@ -150,6 +150,13 @@ void App::toggle_brew() {
 void App::reset_brew() {
     brew.reset();
     brew_engine.reset();
+}
+
+void App::reset_brew_and_tare() {
+    reset_brew();
+    if (!scale.tare_blocking(kQuickTareSamples, 1500)) {
+        Serial.println("Long-press reset: tare failed");
+    }
 }
 
 void App::set_calibration_known_weight(float grams) {

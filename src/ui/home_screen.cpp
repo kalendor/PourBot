@@ -10,6 +10,7 @@ static const lv_color_t COLOR_DIM      = lv_color_hex(0x334155);
 static const lv_color_t COLOR_AMBER    = lv_color_hex(0xFDBA4B);
 static const lv_color_t COLOR_BLUE     = lv_color_hex(0x38BDF8);
 static const lv_color_t COLOR_GREEN    = lv_color_hex(0x4ADE80);
+static constexpr uint32_t START_BUTTON_HOLD_MS = 1000UL;
 
 void HomeScreen::start_button_event_router(lv_event_t* e) {
     HomeScreen* self = static_cast<HomeScreen*>(lv_event_get_user_data(e));
@@ -27,7 +28,7 @@ void HomeScreen::handle_start_button_event(lv_event_t* e) {
     }
 
     if (code == LV_EVENT_PRESSING) {
-        if (!start_button_long_reset_sent && start_button_pressed_ms > 0 && (now - start_button_pressed_ms) >= 2000UL) {
+        if (!start_button_long_reset_sent && start_button_pressed_ms > 0 && (now - start_button_pressed_ms) >= START_BUTTON_HOLD_MS) {
             start_button_long_reset_sent = true;
             if (reset_button_cb) reset_button_cb(nullptr);
         }
@@ -146,10 +147,11 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     lv_obj_align(progress_arc, LV_ALIGN_TOP_MID, 0, 10);
     lv_arc_set_range(progress_arc, 0, 1000);
     lv_arc_set_value(progress_arc, 0);
-    // Full-circle weight track. The white background remains visible at zero,
-    // while the indicator fills clockwise as the active target is approached.
-    lv_arc_set_bg_angles(progress_arc, 0, 360);
-    lv_arc_set_rotation(progress_arc, 135);
+    // Leave the lower 60-degree gap open and fill clockwise along the long
+    // track from 7 o'clock to 5 o'clock.
+    lv_arc_set_bg_angles(progress_arc, 0, 300);
+    lv_arc_set_rotation(progress_arc, 120);
+    lv_arc_set_mode(progress_arc, LV_ARC_MODE_NORMAL);
     lv_obj_remove_style(progress_arc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(progress_arc, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_arc_width(progress_arc, 7, LV_PART_MAIN);

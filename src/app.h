@@ -18,6 +18,7 @@ public:
     void tare();
     void toggle_brew();
     void reset_brew();
+    void reset_brew_and_tare();
     void show_home();
     void show_calibration();
     void show_settings();
