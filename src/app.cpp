@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "config/hardware.h"
 #include "config/version.h"
+#include "storage/brew_log_store.h"
 
 App* g_app = nullptr;
 
@@ -44,6 +45,7 @@ void App::begin() {
     // Keep the final recipe stage synced with the normal target weight.
     if (recipe.stage_count > 0) recipe.stages[recipe.stage_count - 1].target_g = recipe.water_g;
     scale.begin(HW_LOADCELL_DOUT_PIN, HW_LOADCELL_SCK_PIN, saved_calibration_factor);
+    brew_logs.begin();
     Serial.println(scale.ready() ? "HX711 ready" : "HX711 not ready");
     Serial.printf("Calibration factor: %.2f\n", saved_calibration_factor);
 
@@ -82,6 +84,7 @@ void App::update() {
 
     brew_engine.update(recipe, ui_weight_g, brew.elapsed_ms(), brew.is_running());
     BrewStageStatus stage_status = brew_engine.status(recipe);
+    brew_logs.update(brew.elapsed_ms(), brew.is_running(), ui_weight_g, scale.flow_gps(), recipe, stage_status);
 
     uint32_t now = millis();
     if (now - last_web_state_ms >= 50) {

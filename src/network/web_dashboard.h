@@ -51,12 +51,21 @@ private:
     RecipeCallback on_recipe = nullptr;
     IPAddress dashboard_ip;
     bool ap_mode = false;
+    bool network_was_connected = false;
+    uint32_t last_network_check_ms = 0;
 
+    void restart_network_services();
     void handle_root();
     void handle_settings();
     void handle_recipes();
+    void handle_analytics();
     void handle_wifi();
     void handle_status();
+    void handle_brew_logs();
+    void handle_brew_log();
+    void handle_delete_brew_logs();
+    void handle_extraction_get();
+    void handle_extraction_save();
     void handle_tare();
     void handle_start();
     void handle_reset();
@@ -71,6 +80,7 @@ private:
     String build_html() const;
     String build_settings_html() const;
     String build_recipes_html() const;
+    String build_analytics_html() const;
     String build_wifi_html() const;
     String build_json() const;
     bool wifi_restart_pending = false;

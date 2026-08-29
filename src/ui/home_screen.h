@@ -9,12 +9,10 @@ public:
     void update(float grams, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int battery_percent, bool battery_valid, bool charging, bool prebrew_pending = false, bool ready = false);
 private:
     lv_obj_t* card = nullptr;
-    lv_obj_t* status_battery = nullptr;
-    lv_obj_t* battery_body = nullptr;
-    lv_obj_t* battery_tip = nullptr;
-    lv_obj_t* battery_fill = nullptr;
-    lv_obj_t* progress_arc = nullptr;
+    lv_obj_t* progress_panel = nullptr;
+    lv_obj_t* stage_label = nullptr;
     lv_obj_t* weight_label = nullptr;
+    lv_obj_t* grams_label = nullptr;
     lv_obj_t* timer_box = nullptr;
     lv_obj_t* timer_chars[7] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* hold_label = nullptr;

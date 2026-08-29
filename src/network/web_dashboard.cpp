@@ -3,15 +3,24 @@
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <cstring>
+#include <time.h>
 #include "config/hardware.h"
 #include "config/version.h"
+#include "storage/brew_log_store.h"
 
 namespace {
 Preferences wifiPrefs;
+Preferences extractionPrefs;
 constexpr const char* kPrefsNamespace = "pourover";
+constexpr const char* kExtractionPrefsNamespace = "extraction";
 constexpr const char* kWifiSsidKey = "wifi_ssid";
 constexpr const char* kWifiPassKey = "wifi_pass";
 constexpr uint32_t kWifiRestartDelayMs = 900;
+
+void configure_clock() {
+    configTzTime(HW_TIMEZONE, HW_NTP_SERVER_1, HW_NTP_SERVER_2);
+    Serial.println("Clock: NTP synchronization requested");
+}
 }
 
 WebDashboard::WebDashboard() : server(80) {}
@@ -27,6 +36,7 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
 
     ap_mode = false;
     wifiPrefs.begin(kPrefsNamespace, false);
+    extractionPrefs.begin(kExtractionPrefsNamespace, false);
     String sta_ssid = wifiPrefs.getString(kWifiSsidKey, HW_WIFI_STA_SSID);
     String sta_pass = wifiPrefs.getString(kWifiPassKey, HW_WIFI_STA_PASSWORD);
 
@@ -50,12 +60,7 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
     if (WiFi.status() == WL_CONNECTED) {
         dashboard_ip = WiFi.localIP();
         Serial.printf("Connected to Wi-Fi. IP: %s\n", dashboard_ip.toString().c_str());
-        if (MDNS.begin(HW_WIFI_HOSTNAME)) {
-            MDNS.addService("http", "tcp", 80);
-            Serial.printf("mDNS: http://%s.local/\n", HW_WIFI_HOSTNAME);
-        } else {
-            Serial.println("mDNS failed to start");
-        }
+        configure_clock();
     } else {
         ap_mode = true;
         Serial.println("Wi-Fi connect failed. Starting fallback AP.");
@@ -77,8 +82,14 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
     server.on("/", HTTP_GET, [this]() { handle_root(); });
     server.on("/settings", HTTP_GET, [this]() { handle_settings(); });
     server.on("/recipes", HTTP_GET, [this]() { handle_recipes(); });
+    server.on("/analytics", HTTP_GET, [this]() { handle_analytics(); });
     server.on("/wifi", HTTP_GET, [this]() { handle_wifi(); });
     server.on("/api/status", HTTP_GET, [this]() { handle_status(); });
+    server.on("/api/brews", HTTP_GET, [this]() { handle_brew_logs(); });
+    server.on("/api/brew", HTTP_GET, [this]() { handle_brew_log(); });
+    server.on("/api/brews/delete", HTTP_POST, [this]() { handle_delete_brew_logs(); });
+    server.on("/api/extraction", HTTP_GET, [this]() { handle_extraction_get(); });
+    server.on("/api/extraction", HTTP_POST, [this]() { handle_extraction_save(); });
     server.on("/api/tare", HTTP_POST, [this]() { handle_tare(); });
     server.on("/api/start", HTTP_POST, [this]() { handle_start(); });
     server.on("/api/reset", HTTP_POST, [this]() { handle_reset(); });
@@ -90,7 +101,12 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
     server.on("/api/wifi_scan", HTTP_GET, [this]() { handle_wifi_scan(); });
     server.on("/api/wifi_clear", HTTP_POST, [this]() { handle_wifi_clear(); });
     server.onNotFound([this]() { server.send(404, "text/plain", "Not found"); });
-    server.begin();
+    // Give the Wi-Fi network interface a moment to finish installing its IP
+    // before binding the HTTP listener. Starting mDNS first occasionally left
+    // the ESP32 reachable by ping but without port 80 listening after a reconnect.
+    delay(100);
+    restart_network_services();
+    network_was_connected = WiFi.status() == WL_CONNECTED;
 
     if (ap_mode) {
         Serial.printf("Web dashboard fallback AP: %s\n", HW_WIFI_AP_SSID);
@@ -102,9 +118,42 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
 
 void WebDashboard::update() {
     server.handleClient();
+
+    if (!ap_mode && millis() - last_network_check_ms >= 1000) {
+        last_network_check_ms = millis();
+        const bool connected = WiFi.status() == WL_CONNECTED;
+        if (connected != network_was_connected) {
+            network_was_connected = connected;
+            if (connected) {
+                dashboard_ip = WiFi.localIP();
+                configure_clock();
+                restart_network_services();
+                Serial.printf("Wi-Fi restored. Web UI: http://%s/ or http://%s.local/\n",
+                              dashboard_ip.toString().c_str(), HW_WIFI_HOSTNAME);
+            } else {
+                MDNS.end();
+                server.stop();
+                Serial.println("Wi-Fi lost. Web services paused until reconnect.");
+            }
+        }
+    }
+
     if (wifi_restart_pending && millis() >= wifi_restart_at_ms) {
         delay(100);
         ESP.restart();
+    }
+}
+
+void WebDashboard::restart_network_services() {
+    server.stop();
+    server.begin(80);
+
+    MDNS.end();
+    if (MDNS.begin(HW_WIFI_HOSTNAME)) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.printf("mDNS: http://%s.local/\n", HW_WIFI_HOSTNAME);
+    } else {
+        Serial.println("mDNS failed to start");
     }
 }
 
@@ -130,6 +179,12 @@ void WebDashboard::handle_recipes() {
     server.send(200, "text/html", build_recipes_html());
 }
 
+void WebDashboard::handle_analytics() {
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/html", build_analytics_html());
+}
+
 void WebDashboard::handle_wifi() {
     server.sendHeader("Cache-Control", "no-store");
     server.sendHeader("Connection", "close");
@@ -140,6 +195,66 @@ void WebDashboard::handle_status() {
     server.sendHeader("Cache-Control", "no-store");
     server.sendHeader("Connection", "close");
     server.send(200, "application/json", build_json());
+}
+
+void WebDashboard::handle_brew_logs() {
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    server.send(200, "application/json", brew_logs.list_json());
+}
+
+void WebDashboard::handle_brew_log() {
+    const String name = server.hasArg("name") ? server.arg("name") : "";
+    File file = brew_logs.open_log(name);
+    if (!file) {
+        server.send(404, "application/json", "{\"ok\":false,\"error\":\"log_not_found\"}");
+        return;
+    }
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + name + "\"");
+    server.streamFile(file, "text/csv");
+    file.close();
+}
+
+void WebDashboard::handle_delete_brew_logs() {
+    const int deleted = brew_logs.delete_all_logs();
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    if (deleted == -1) {
+        server.send(503, "application/json", "{\"ok\":false,\"error\":\"sd_unavailable\"}");
+    } else if (deleted == -2) {
+        server.send(409, "application/json", "{\"ok\":false,\"error\":\"brew_recording\"}");
+    } else if (deleted < 0) {
+        server.send(500, "application/json", "{\"ok\":false,\"error\":\"delete_failed\"}");
+    } else {
+        server.send(200, "application/json", String("{\"ok\":true,\"deleted\":") + deleted + "}");
+    }
+}
+
+void WebDashboard::handle_extraction_get() {
+    const float dose = extractionPrefs.getFloat("dose", 20.0f);
+    const float beverage = extractionPrefs.getFloat("beverage", 280.0f);
+    const float tds = extractionPrefs.getFloat("tds", 1.35f);
+    String json = "{\"ok\":true,\"dose\":" + String(dose, 1);
+    json += ",\"beverage\":" + String(beverage, 1);
+    json += ",\"tds\":" + String(tds, 2) + "}";
+    server.sendHeader("Cache-Control", "no-store");
+    server.sendHeader("Connection", "close");
+    server.send(200, "application/json", json);
+}
+
+void WebDashboard::handle_extraction_save() {
+    float dose = server.hasArg("dose") ? server.arg("dose").toFloat() : extractionPrefs.getFloat("dose", 20.0f);
+    float beverage = server.hasArg("beverage") ? server.arg("beverage").toFloat() : extractionPrefs.getFloat("beverage", 280.0f);
+    float tds = server.hasArg("tds") ? server.arg("tds").toFloat() : extractionPrefs.getFloat("tds", 1.35f);
+    dose = constrain(dose, 0.1f, 250.0f);
+    beverage = constrain(beverage, 0.0f, 5000.0f);
+    tds = constrain(tds, 0.0f, 20.0f);
+    extractionPrefs.putFloat("dose", dose);
+    extractionPrefs.putFloat("beverage", beverage);
+    extractionPrefs.putFloat("tds", tds);
+    server.sendHeader("Connection", "close");
+    server.send(200, "application/json", "{\"ok\":true}");
 }
 
 void WebDashboard::handle_tare() {
@@ -357,6 +472,8 @@ String WebDashboard::build_json() const {
     json += "\"screen\":\"" + String(state.screen_name ? state.screen_name : "") + "\",";
     json += "\"ip\":\"" + dashboard_ip.toString() + "\",";
     json += "\"wifi_mode\":\"" + String(ap_mode ? "AP" : "STA") + "\",";
+    json += "\"sd_available\":" + String(brew_logs.available() ? "true" : "false") + ",";
+    json += "\"brew_logging\":" + String(brew_logs.logging() ? "true" : "false") + ",";
     json += "\"recipe_name\":\"" + String(state.recipe.name) + "\",";
     json += "\"stage_name\":\"" + String(state.stage.stage_name ? state.stage.stage_name : "") + "\",";
     json += "\"stage_index\":" + String(state.stage.active_index) + ",";
@@ -456,53 +573,31 @@ String WebDashboard::build_html() const {
     .battery { width:28px; height:14px; border:1px solid currentColor; border-radius:3px; padding:2px; position:relative; color:var(--muted); }
     .battery:after { content:""; position:absolute; right:-5px; top:4px; width:3px; height:6px; border-radius:1px; background:currentColor; }
     .battery-fill { display:block; height:100%; width:0%; border-radius:1px; background:currentColor; transition:width .18s linear; }
-    .settings-link {
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      width:100%;
-      min-height:36px;
-      margin-top:8px;
-      color:var(--dim);
-      text-decoration:none;
-      font-size:12px;
-      font-weight:800;
-      letter-spacing:.09em;
-      text-transform:uppercase;
-      border:1px solid rgba(148,163,184,.25);
-      padding:8px 11px;
-      border-radius:999px;
-      background:rgba(2,6,23,.45);
-    }
+    .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:3px; margin:0 0 16px; padding:3px; border:1px solid var(--border); border-radius:14px; background:rgba(2,6,23,.58); }
+    .tab { display:flex; align-items:center; justify-content:center; min-width:0; min-height:32px; padding:7px 3px; border-radius:10px; color:var(--dim); text-decoration:none; font-size:11px; font-weight:850; letter-spacing:.02em; touch-action:manipulation; }
+    .tab.active { color:#fff; background:#334155; box-shadow:0 3px 12px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.06); }
     .dial {
       position:relative;
       width:min(304px, 74vw);
       aspect-ratio:1;
-      margin:6px auto 4px;
+      margin:8px auto 14px;
       border-radius:50%;
       display:grid;
       place-items:center;
-      --ring: var(--amber);
-      --ringGlow: rgba(251,191,36,.10);
-      /* Keep the lower 60-degree gap open and grow the colored segment
-         counterclockwise from 5 o'clock toward 7 o'clock. */
-      background:
-        conic-gradient(from 150deg,
-          transparent 0deg 60deg,
-          var(--track) 60deg calc(360deg - var(--arc,0deg)),
-          var(--ring) calc(360deg - var(--arc,0deg)) 360deg);
-      filter:drop-shadow(0 0 24px var(--ringGlow));
+      --liquidSoft:rgba(251,191,36,.28);
+      background:var(--track);
+      filter:drop-shadow(0 0 24px rgba(251,191,36,.10));
     }
     .dial.complete {
-      --ring: var(--green);
-      --ringGlow: rgba(34,197,94,.28);
+      --liquidSoft:rgba(34,197,94,.30);
+      filter:drop-shadow(0 0 24px rgba(34,197,94,.28));
     }
     .dial.holding {
       animation: holdPulse 1.7s ease-in-out infinite;
     }
     @keyframes holdPulse {
-      0%, 100% { --ring:#FDBA4B; --ringGlow:rgba(253,186,75,.44); }
-      50% { --ring:#4ADE80; --ringGlow:rgba(34,197,94,.22); }
+      0%, 100% { filter:drop-shadow(0 0 25px rgba(253,186,75,.42)); }
+      50% { filter:drop-shadow(0 0 18px rgba(34,197,94,.20)); }
     }
     .dial:before {
       content:"";
@@ -512,7 +607,27 @@ String WebDashboard::build_html() const {
       background:linear-gradient(180deg, #101827, #080B12 76%);
       box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
     }
-    .readout { position:relative; z-index:1; text-align:center; width:90%; transform:translateY(5px); }
+    .liquid {
+      position:absolute;
+      inset:8px;
+      z-index:1;
+      overflow:hidden;
+      border-radius:50%;
+    }
+    .liquid:before {
+      content:"";
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:var(--fill,0%);
+      background:linear-gradient(180deg, var(--liquidSoft), rgba(2,6,23,.14));
+      box-shadow:0 -7px 20px var(--liquidSoft);
+      transition:height .28s ease-out, background .18s ease;
+    }
+    .readout { position:relative; z-index:2; text-align:center; width:90%; transform:translateY(5px); }
+    .stage-label { min-height:18px; color:var(--amber); font-size:14px; line-height:1.15; font-weight:850; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; }
+    .stage-label:empty { display:none; }
     .target-line { color:var(--muted); font-size:22px; font-weight:750; font-variant-numeric:tabular-nums; margin-bottom:8px; }
     .weight { font-size:66px; line-height:.9; font-weight:850; letter-spacing:-4px; font-variant-numeric:tabular-nums; }
     .grams { color:var(--muted); font-size:15px; font-weight:700; margin-top:8px; }
@@ -524,7 +639,7 @@ String WebDashboard::build_html() const {
       display:flex;
       align-items:center;
       justify-content:center;
-      margin:8px auto 8px;
+      margin:12px auto 8px;
       background:var(--panel);
       border:2px solid var(--amber);
       border-radius:999px;
@@ -534,8 +649,8 @@ String WebDashboard::build_html() const {
     .flow-row { display:flex; align-items:center; justify-content:center; gap:10px; margin:4px 0 6px; }
     .flow-dot { width:11px; height:11px; border-radius:50%; background:var(--amber); box-shadow:0 0 15px rgba(251,191,36,.72); }
     .flow { font-size:25px; font-weight:750; font-variant-numeric:tabular-nums; }
-    .progress { text-align:center; color:var(--dim); font-size:15px; font-weight:750; margin:6px 0 10px; }
-    .controls { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:6px; }
+    .progress { text-align:center; color:var(--dim); font-size:15px; font-weight:750; margin:6px 0 18px; }
+    .controls { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:0; }
     button {
       appearance:none;
       border:0;
@@ -583,36 +698,39 @@ String WebDashboard::build_html() const {
       .app { padding:0 6px; }
       .card { padding-top:10px; padding-bottom:10px; }
       .status { margin-bottom:6px; font-size:13px; }
-      .dial { width:min(282px, 70vw); margin-top:4px; }
+      .tabs { margin-bottom:12px; }
+      .dial { width:min(282px, 70vw); margin:6px auto 10px; }
       .weight { font-size:60px; }
       .target-line { font-size:20px; margin-bottom:6px; }
       .grams { margin-top:6px; }
-      .timer-box { height:40px; width:172px; margin:6px auto; }
+      .timer-box { height:40px; width:172px; margin:10px auto 6px; }
       .timer { font-size:26px; }
       .flow { font-size:23px; }
-      .progress { margin:4px 0 8px; }
+      .progress { margin:4px 0 14px; }
+      .controls { margin-top:0; }
       button { min-height:42px; }
       .target input { min-height:42px; }
-      .settings-link { min-height:32px; margin-top:6px; }
+      .tab { min-height:30px; padding:6px 3px; }
       .meta { display:none; }
     }
 
     @media (max-height:640px) {
       .card { padding:9px 12px; border-radius:24px; }
       .status { margin-bottom:4px; font-size:12px; }
-      .settings-link { min-height:30px; padding:6px 10px; margin-top:5px; }
-      .dial { width:min(260px, 68vw); margin:4px auto 2px; }
+      .tabs { margin-bottom:8px; }
+      .tab { min-height:27px; padding:5px 2px; font-size:10px; }
+      .dial { width:min(260px, 68vw); margin:4px auto 8px; }
       .dial:before { inset:7px; }
       .readout { transform:translateY(3px); }
       .weight { font-size:54px; }
       .target-line { font-size:18px; margin-bottom:5px; }
       .grams { font-size:13px; margin-top:5px; }
-      .timer-box { height:38px; width:164px; margin:5px auto; }
+      .timer-box { height:38px; width:164px; margin:7px auto 5px; }
       .timer { font-size:24px; }
       .flow-row { margin:3px 0 4px; }
       .flow { font-size:21px; }
-      .progress { font-size:13px; margin:3px 0 6px; }
-      .controls { gap:7px; margin-top:4px; }
+      .progress { font-size:13px; margin:3px 0 10px; }
+      .controls { gap:7px; margin-top:0; }
       button { min-height:38px; font-size:13px; border-radius:14px; }
       .target { margin-top:6px; gap:8px; }
       .target input { min-height:38px; font-size:16px; }
@@ -624,14 +742,21 @@ String WebDashboard::build_html() const {
 <body>
   <main class="app">
     <section class="card">
+      <nav class="tabs" aria-label="Main navigation">
+        <a class="tab active" href="/" aria-current="page">Dashboard</a>
+        <a class="tab" href="/recipes" onpointerdown="stopDashboardPolling()">Recipes</a>
+        <a class="tab" href="/analytics" onpointerdown="stopDashboardPolling()">Analytics</a>
+        <a class="tab" href="/settings" onpointerdown="stopDashboardPolling()">Settings</a>
+        <a class="tab" href="/wifi" onpointerdown="stopDashboardPolling()">WiFi</a>
+      </nav>
       <div class="status">
-        <div class="wifi"><span id="wifiLabel">WiFi</span><span class="dot" id="wifiDot"></span></div>
-        <div class="live" id="liveLabel">LIVE</div>
-        <div class="pwr"><span class="battery" id="battery"><span class="battery-fill" id="batteryFill"></span></span><span id="powerText">PWR --</span></div>
+        <div class="live" id="liveLabel"></div>
       </div>
 
       <div class="dial" id="dial">
+        <div class="liquid" aria-hidden="true"></div>
         <div class="readout">
+          <div class="stage-label" id="stageLabel"></div>
           <div class="target-line" id="targetLine">0 / 320</div>
           <div class="weight" id="weight">0.0</div>
           <div class="grams">grams</div>
@@ -650,12 +775,8 @@ String WebDashboard::build_html() const {
         <button onclick="cmd('reset')">RESET</button>
       </div>
 
-      <div class="target">
-        <input id="targetInput" type="number" min="10" max="5000" step="1" value="320" aria-label="Target water grams">
-        <button onclick="setTarget()">SET</button>
-      </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><a class="settings-link" href="/settings" onclick="stopDashboardPolling()">Settings</a><a class="settings-link" href="/recipes" onclick="stopDashboardPolling()">Recipes</a></div>
+
     </section>
     <div class="meta" id="meta">Connecting...</div>
   </main>
@@ -703,6 +824,7 @@ const el = {
   powerText: document.getElementById('powerText'),
   timer: document.getElementById('timer'),
   weight: document.getElementById('weight'),
+  stageLabel: document.getElementById('stageLabel'),
   targetLine: document.getElementById('targetLine'),
   flow: document.getElementById('flow'),
   progress: document.getElementById('progress'),
@@ -723,12 +845,20 @@ let statusInFlight = false;
 let statusAbort = null;
 let statusTimer = null;
 let timerRenderTimer = null;
+let dashboardPollingStopped = false;
 
 function stopDashboardPolling() {
-  if (statusTimer) clearInterval(statusTimer);
+  dashboardPollingStopped = true;
+  if (statusTimer) clearTimeout(statusTimer);
   if (timerRenderTimer) clearTimeout(timerRenderTimer);
   if (statusAbort) { try { statusAbort.abort(); } catch(e) {} }
   statusInFlight = false;
+}
+
+async function pollDashboard() {
+  if (dashboardPollingStopped || document.hidden) return;
+  await update();
+  if (!dashboardPollingStopped) statusTimer = setTimeout(pollDashboard, 850);
 }
 
 function syncTimer(elapsedMs, running) {
@@ -776,11 +906,10 @@ async function update() {
     const activeTarget = recipeMode ? stageTarget : target;
     const complete = !prebrewPending && activeTarget > 0 && safeWeight >= (activeTarget - 0.5);
     const pct = prebrewPending ? 0 : Math.max(0, Math.min(100, ((safeWeight - activeStart) / Math.max(1, activeTarget - activeStart)) * 100));
-    const arc = Math.round((pct / 100) * 300);
+    const fill = Math.round(pct * 10) / 10;
     el.weight.textContent = w.toFixed(1);
-    el.targetLine.textContent = recipeMode
-      ? (d.stage_name || 'Stage') + '  ' + safeWeight.toFixed(0) + ' / ' + activeTarget.toFixed(0)
-      : safeWeight.toFixed(0) + ' / ' + target.toFixed(0);
+    el.stageLabel.textContent = recipeMode ? (d.stage_name || 'Stage') : '';
+    el.targetLine.textContent = safeWeight.toFixed(0) + ' / ' + activeTarget.toFixed(0);
     syncTimer(Number(d.elapsed_ms || 0), !!d.running);
     el.flow.textContent = Number(d.flow_gps || 0).toFixed(1) + ' g/s';
     if (prebrewPending) el.progress.textContent = 'settling / auto tare';
@@ -790,13 +919,12 @@ async function update() {
       else el.progress.textContent = 'stage ' + (Number(d.stage_index || 0) + 1) + '/' + Number(d.stage_count || 0) + ' · ' + Math.round(pct) + '%';
     } else el.progress.textContent = Math.round(pct) + '% to target';
     el.readyPill.classList.toggle('show', pourReady && !d.running);
-    el.dial.style.setProperty('--arc', arc + 'deg');
+    el.dial.style.setProperty('--fill', fill + '%');
     const holding = !!d.stage_holding;
     el.dial.classList.toggle('complete', complete);
     el.dial.classList.toggle('holding', holding);
     if (!holding) {
-      el.dial.style.setProperty('--ring', complete ? '#4ADE80' : '#FDBA4B');
-      el.dial.style.setProperty('--ringGlow', complete ? 'rgba(34,197,94,.28)' : 'rgba(251,191,36,.10)');
+      el.dial.style.setProperty('--liquidSoft', complete ? 'rgba(34,197,94,.30)' : 'rgba(251,191,36,.28)');
     }
     if (document.activeElement !== el.targetInput) el.targetInput.value = target.toFixed(0);
     el.startBtn.textContent = d.running ? 'PAUSE' : 'START';
@@ -806,8 +934,10 @@ async function update() {
     setBattery(d);
     el.meta.textContent = (d.running ? 'BREWING' : (pourReady ? 'READY TO POUR' : 'IDLE')) + ' · IP ' + (d.ip || '--');
   } catch(e) {
-    el.liveLabel.textContent = 'OFFLINE';
-    el.meta.textContent = 'Connection lost';
+    // Keep transient network failures visually quiet. Polling continues and the
+    // next successful response refreshes the normal status automatically.
+    el.liveLabel.textContent = '';
+    el.meta.textContent = '';
   } finally {
     statusInFlight = false;
     statusAbort = null;
@@ -822,10 +952,17 @@ async function setTarget() {
   try { await fetch('/api/target?g=' + encodeURIComponent(v), {method:'POST'}); } catch(e) {}
   update();
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) update(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (statusAbort) { try { statusAbort.abort(); } catch(e) {} }
+  } else if (!dashboardPollingStopped) {
+    if (statusTimer) clearTimeout(statusTimer);
+    pollDashboard();
+  }
+});
+window.addEventListener('pagehide', stopDashboardPolling);
 scheduleTimerRender();
-statusTimer = setInterval(update, 650);
-update();
+pollDashboard();
 </script>
 </body>
 </html>
@@ -845,11 +982,12 @@ String WebDashboard::build_settings_html() const {
     * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     html { background:#020617; }
     body { margin:0; background:radial-gradient(circle at 50% -10%, rgba(56,189,248,.12), transparent 34%), #020617; color:#fff; min-height:100vh; min-height:100dvh; }
-    .app { width:min(520px, 100%); margin:0 auto; padding:16px; }
-    .card { background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,13,24,.98)); border:1px solid #1e293b; border-radius:30px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
-    .top { display:grid; grid-template-columns:1fr; gap:12px; color:#94a3b8; font-size:14px; margin-bottom:18px; }
-    .top div { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
-    .top a { color:#cbd5e1; text-align:center; text-decoration:none; border:1px solid #334155; padding:10px 8px; border-radius:999px; font-weight:850; background:rgba(2,6,23,.42); }
+    .app { width:min(420px, 96vw); margin:0 auto; padding:16px 8px; }
+    .card { width:100%; background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,13,24,.98)); border:1px solid #1e293b; border-radius:28px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
+    .top { margin-bottom:18px; }
+    .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid #1e293b; border-radius:16px; background:rgba(2,6,23,.58); }
+    .tab { color:#64748b; text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:12px; font-weight:850; touch-action:manipulation; }
+    .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     .section { margin-top:18px; padding-top:18px; border-top:1px solid #1e293b; }
     .section:first-of-type { border-top:0; padding-top:0; }
     h1 { margin:0; font-size:24px; }
@@ -878,9 +1016,8 @@ String WebDashboard::build_settings_html() const {
     .battery-health.warn { background:rgba(217,119,6,.18); color:#fcd34d; }
     .battery-health.bad { background:rgba(185,28,28,.20); color:#fca5a5; }
 
-    @media (min-width:430px) { .top { grid-template-columns:1fr auto; align-items:center; } .top div { grid-template-columns:auto auto auto; } .top a { min-width:92px; } }
     @media (max-width:390px), (max-height:720px) {
-      .app { padding:10px 8px; width:100%; }
+      .app { padding:10px 8px; width:96vw; }
       .card { border-radius:24px; padding:18px 14px; }
       .section { margin-top:15px; padding-top:15px; }
       input, select, button { min-height:48px; font-size:16px; padding:12px 10px; }
@@ -891,7 +1028,8 @@ String WebDashboard::build_settings_html() const {
 <body>
   <main class="app">
     <section class="card">
-      <div class="top"><h1>Settings</h1><div><a href="/recipes">Recipes</a> <a href="/wifi">WiFi</a> <a href="/">Dashboard</a></div></div>
+      <nav class="tabs" aria-label="Main navigation"><a class="tab" href="/" onpointerdown="stopSettingsPolling()">Dashboard</a><a class="tab" href="/recipes" onpointerdown="stopSettingsPolling()">Recipes</a><a class="tab" href="/analytics" onpointerdown="stopSettingsPolling()">Analytics</a><a class="tab active" href="/settings" aria-current="page">Settings</a><a class="tab" href="/wifi" onpointerdown="stopSettingsPolling()">WiFi</a></nav>
+      <div class="top"><h1>Settings</h1></div>
 
       <div class="section">
         <h2>Target Weight</h2>
@@ -987,6 +1125,22 @@ const el = {
 };
 let settingsStatusInFlight = false;
 let lastTargetFromScale = 320;
+let settingsStatusAbort = null;
+let settingsStatusTimer = null;
+let settingsPollingStopped = false;
+
+function stopSettingsPolling() {
+  settingsPollingStopped = true;
+  if (settingsStatusTimer) clearTimeout(settingsStatusTimer);
+  if (settingsStatusAbort) { try { settingsStatusAbort.abort(); } catch(e) {} }
+  settingsStatusInFlight = false;
+}
+
+async function pollSettings() {
+  if (settingsPollingStopped || document.hidden) return;
+  await update();
+  if (!settingsPollingStopped) settingsStatusTimer = setTimeout(pollSettings, 1500);
+}
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function activeRatio() {
@@ -1058,7 +1212,8 @@ async function update() {
   if (settingsStatusInFlight) return;
   settingsStatusInFlight = true;
   try {
-    const r = await fetch('/api/status', {cache:'no-store'});
+    settingsStatusAbort = new AbortController();
+    const r = await fetch('/api/status', {cache:'no-store', signal:settingsStatusAbort.signal});
     const d = await r.json();
     const target = Number(d.target_g || lastTargetFromScale || 320);
     lastTargetFromScale = target;
@@ -1069,6 +1224,7 @@ async function update() {
     el.meta.textContent = 'Connection lost';
   } finally {
     settingsStatusInFlight = false;
+    settingsStatusAbort = null;
   }
 }
 async function calTare() {
@@ -1087,9 +1243,9 @@ async function calibrateScale() {
   }
   update();
 }
-setInterval(update, 1500);
+window.addEventListener('pagehide', stopSettingsPolling);
 ratioChanged();
-update();
+pollSettings();
 </script>
 </body>
 </html>
@@ -1109,7 +1265,7 @@ String WebDashboard::build_wifi_html() const {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-  <title>Pourover Scale WiFi Setup</title>
+  <title>PourBot WiFi Setup</title>
   <style>
     :root {
       color-scheme: dark;
@@ -1146,19 +1302,10 @@ String WebDashboard::build_wifi_html() const {
       padding:20px;
       box-shadow:0 24px 70px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04);
     }
-    .top { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:18px; }
-    .nav { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-    .top a {
-      color:#cbd5e1;
-      text-decoration:none;
-      text-align:center;
-      border:1px solid var(--border2);
-      padding:11px 10px;
-      border-radius:999px;
-      font-size:13px;
-      font-weight:900;
-      background:rgba(2,6,23,.42);
-    }
+    .top { margin-bottom:18px; }
+    .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid var(--border); border-radius:16px; background:rgba(2,6,23,.58); }
+    .tab { color:var(--dim); text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:12px; font-weight:850; }
+    .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     h1 { margin:0; font-size:28px; letter-spacing:-.03em; }
     h2 { margin:20px 0 12px; font-size:13px; color:var(--muted); letter-spacing:.10em; text-transform:uppercase; }
     label { display:block; color:var(--muted); font-size:13px; font-weight:800; margin:0 0 8px; }
@@ -1229,9 +1376,6 @@ String WebDashboard::build_wifi_html() const {
       font-weight:750;
     }
     @media (min-width:430px) {
-      .top { grid-template-columns:1fr auto; align-items:center; }
-      .nav { grid-template-columns:auto auto; }
-      .top a { min-width:108px; }
       .action-grid { grid-template-columns:1fr 1fr; }
       .action-grid .full { grid-column:1 / -1; }
     }
@@ -1240,7 +1384,7 @@ String WebDashboard::build_wifi_html() const {
       .card{border-radius:24px;padding:17px 13px;}
       h1{font-size:25px;}
       input,button{min-height:50px;font-size:16px;padding:12px 11px;}
-      .top a{padding:10px 8px;}
+      .tab{padding:9px 2px;font-size:11px;}
       .status{padding:13px;}
     }
   </style>
@@ -1248,7 +1392,8 @@ String WebDashboard::build_wifi_html() const {
 <body>
   <main class="app">
     <section class="card">
-      <div class="top"><h1>WiFi Setup</h1><div class="nav"><a href="/settings">Settings</a><a href="/">Dashboard</a></div></div>
+      <nav class="tabs" aria-label="Main navigation"><a class="tab" href="/">Dashboard</a><a class="tab" href="/recipes">Recipes</a><a class="tab" href="/analytics">Analytics</a><a class="tab" href="/settings">Settings</a><a class="tab active" href="/wifi" aria-current="page">WiFi</a></nav>
+      <div class="top"><h1>WiFi Setup</h1></div>
       <div class="status">
         <div><b>Mode:</b> )HTML" + mode + R"HTML(</div>
         <div><b>Current network:</b> )HTML" + current + R"HTML(</div>
@@ -1330,6 +1475,180 @@ async function clearWifi(){
     return html;
 }
 
+String WebDashboard::build_analytics_html() const {
+    return R"HTML(
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>PourBot Analytics</title>
+  <style>
+    :root { color-scheme:dark; --bg:#020617; --card:#0f172a; --panel:#080b12; --border:#1e293b; --text:#f8fafc; --muted:#94a3b8; --dim:#64748b; --amber:#fbbf24; --blue:#38bdf8; --green:#4ade80; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html { background:var(--bg); }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 50% -10%,rgba(56,189,248,.12),transparent 34%),var(--bg); color:var(--text); }
+    .app { width:min(540px,100%); margin:0 auto; padding:16px; }
+    .card { background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(8,13,24,.98)); border:1px solid var(--border); border-radius:30px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+    .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid var(--border); border-radius:16px; background:rgba(2,6,23,.58); }
+    .tab { min-width:0; color:var(--dim); text-align:center; text-decoration:none; padding:10px 2px; border-radius:12px; font-size:11px; font-weight:850; touch-action:manipulation; }
+    .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+    h1 { margin:0 0 6px; font-size:24px; }
+    h2 { margin:20px 0 10px; color:var(--muted); font-size:13px; letter-spacing:.09em; text-transform:uppercase; }
+    .intro,.note { color:var(--muted); font-size:13px; line-height:1.45; }
+    .chart-wrap { margin-top:14px; padding:10px; border:1px solid var(--border); border-radius:18px; background:var(--panel); }
+    canvas { display:block; width:100%; height:220px; }
+    .legend { display:flex; justify-content:center; gap:18px; margin-top:7px; color:var(--muted); font-size:11px; font-weight:800; }
+    .key:before { content:""; display:inline-block; width:12px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; background:var(--key); }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+    .stat { min-width:0; padding:11px 7px; border:1px solid var(--border); border-radius:15px; background:rgba(2,6,23,.62); text-align:center; }
+    .stat span { display:block; color:var(--dim); font-size:10px; font-weight:850; letter-spacing:.05em; text-transform:uppercase; }
+    .stat strong { display:block; margin-top:6px; font-size:17px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    label { display:block; margin-bottom:6px; color:var(--muted); font-size:11px; font-weight:800; }
+    input,select { width:100%; min-height:46px; padding:10px 6px; border:1px solid #334155; border-radius:14px; outline:none; background:#020617; color:#fff; text-align:center; font-size:16px; font-weight:800; }
+    input:focus,select:focus { border-color:var(--blue); }
+    .results { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+    .result { padding:12px 6px; border-radius:15px; background:rgba(56,189,248,.08); border:1px solid rgba(56,189,248,.18); text-align:center; }
+    .result span { display:block; color:var(--muted); font-size:10px; font-weight:800; text-transform:uppercase; }
+    .result strong { display:block; margin-top:5px; color:var(--blue); font-size:19px; font-variant-numeric:tabular-nums; }
+    .ey-good strong { color:var(--green); }
+    .actions { margin-top:10px; }
+    .actions button { width:100%; }
+    .history { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:start; }
+    .history select { text-align:left; padding:6px 10px; }
+    button { min-height:46px; border:0; border-radius:14px; background:#334155; color:#fff; font-size:13px; font-weight:850; }
+    button.primary { background:#16a34a; }
+    button.danger { width:100%; margin-top:8px; background:#b91c1c; }
+    .foot { margin-top:12px; color:var(--dim); font-size:11px; line-height:1.45; }
+    @media(max-width:390px){.app{padding:10px 8px}.card{padding:18px 12px;border-radius:24px}.tab{font-size:10px;padding:9px 1px}.stats{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:1fr}.results{grid-template-columns:1fr 1fr}.history{grid-template-columns:1fr 1fr}.history select{grid-column:1/-1}canvas{height:190px}}
+  </style>
+</head>
+<body>
+  <main class="app"><section class="card">
+    <nav class="tabs" aria-label="Main navigation"><a class="tab" href="/" onpointerdown="stopPolling()">Dashboard</a><a class="tab" href="/recipes" onpointerdown="stopPolling()">Recipes</a><a class="tab active" href="/analytics" aria-current="page">Analytics</a><a class="tab" href="/settings" onpointerdown="stopPolling()">Settings</a><a class="tab" href="/wifi" onpointerdown="stopPolling()">WiFi</a></nav>
+    <h1>Brew Analytics</h1>
+    <div class="intro">Live weight and flow data are recorded while this page is open. Start a new brew from the Dashboard, then return here to inspect its shape.</div>
+
+    <div class="chart-wrap">
+      <canvas id="chart" aria-label="Brew weight and flow graph"></canvas>
+      <div class="legend"><span class="key" style="--key:var(--amber)">Weight</span><span class="key" style="--key:var(--blue)">Flow</span></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Elapsed</span><strong id="elapsed">00:00</strong></div>
+      <div class="stat"><span>Water</span><strong id="weight">0.0 g</strong></div>
+      <div class="stat"><span>Current flow</span><strong id="flow">0.00</strong></div>
+      <div class="stat"><span>Average flow</span><strong id="avgFlow">0.00</strong></div>
+      <div class="stat"><span>Peak flow</span><strong id="peakFlow">0.00</strong></div>
+      <div class="stat"><span>Stage</span><strong id="stage">—</strong></div>
+    </div>
+    <div class="actions"><button onclick="clearGraph()">CLEAR GRAPH</button></div>
+
+    <h2>Saved brews</h2>
+    <div class="history"><select id="brewFiles" aria-label="Saved brew files"><option value="">Checking SD card…</option></select><button onclick="loadSavedBrew()">LOAD</button><button onclick="downloadSavedBrew()">DOWNLOAD</button></div>
+    <button class="danger" onclick="deleteAllBrews()">DELETE ALL SAVED BREWS</button>
+    <div class="note" id="sdStatus">Brew files are recorded by the scale even when this page is closed.</div>
+
+    <h2>Extraction calculator</h2>
+    <div class="grid3">
+      <div><label for="dose">Dry coffee dose (g)</label><input id="dose" type="number" min="1" max="250" step="0.1" value="20"></div>
+      <div><label for="beverage">Beverage mass (g)</label><input id="beverage" type="number" min="1" max="5000" step="0.1" value="280"></div>
+      <div><label for="tds">Refractometer TDS (%)</label><input id="tds" type="number" min="0.1" max="20" step="0.01" value="1.35"></div>
+    </div>
+    <div class="results">
+      <div class="result ey-good"><span>Extraction yield</span><strong id="ey">18.9%</strong></div>
+      <div class="result"><span>Dissolved solids</span><strong id="solids">3.78 g</strong></div>
+      <div class="result"><span>Water ratio</span><strong id="ratio">1:16.0</strong></div>
+    </div>
+    <div class="note" id="interpretation">Enter a cooled, filtered refractometer reading for a meaningful extraction result.</div>
+    <div class="foot">Extraction yield is calculated as beverage mass × TDS ÷ dry dose. The scale measures mass and flow—not TDS.</div>
+  </section></main>
+<script>
+const points=[]; let aborter=null,timer=null,calculatorSaveTimer=null,stopped=false,lastWeight=0,lastTarget=320,lastElapsed=0,viewingSaved=false,lastBrewRefresh=0;
+const $=id=>document.getElementById(id);
+function stopPolling(){stopped=true;if(timer)clearTimeout(timer);if(aborter){try{aborter.abort()}catch(e){}}}
+function fmt(ms){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function clearGraph(){points.length=0;viewingSaved=false;draw();}
+async function refreshBrews(){
+  try{const s=$('brewFiles'),selected=s.value,r=await fetch('/api/brews',{cache:'no-store'}),d=await r.json();s.innerHTML='';
+    if(!d.ok){s.innerHTML='<option value="">No SD card detected</option>';$('sdStatus').textContent='Insert a FAT32 microSD card, then restart PourBot.';return}
+    const files=(d.files||[]).slice().reverse();if(!files.length)s.innerHTML='<option value="">No saved brews yet</option>';
+    files.forEach(f=>{const o=document.createElement('option');o.value=f.name;o.textContent=f.name+' · '+Math.max(1,Math.round(f.bytes/1024))+' KB';s.appendChild(o)});
+    if(selected&&files.some(f=>f.name===selected))s.value=selected;
+    $('sdStatus').textContent=d.logging?'Recording the current brew to SD card…':files.length+' brew file'+(files.length===1?'':'s')+' saved on SD card.';
+    lastBrewRefresh=Date.now();
+  }catch(e){$('sdStatus').textContent='Could not read brew history.'}
+}
+async function loadSavedBrew(){
+  const name=$('brewFiles').value;if(!name)return;
+  try{const text=await (await fetch('/api/brew?name='+encodeURIComponent(name),{cache:'no-store'})).text();points.length=0;
+    text.split(/\r?\n/).forEach(line=>{if(!line||line[0]==='#'||line.startsWith('elapsed_ms'))return;const v=line.split(',');if(v.length>=3)points.push({t:Number(v[0]),w:Number(v[1]),f:Number(v[2])})});
+    const targetLine=text.match(/^# target_g,([0-9.]+)/m);if(targetLine)lastTarget=Number(targetLine[1]);viewingSaved=true;draw();$('sdStatus').textContent='Viewing '+name+' · '+points.length+' samples.';
+  }catch(e){$('sdStatus').textContent='Could not load that brew.'}
+}
+function downloadSavedBrew(){const name=$('brewFiles').value;if(name)location.href='/api/brew?name='+encodeURIComponent(name)}
+async function deleteAllBrews(){
+  if(!confirm('Permanently delete every saved brew record? This cannot be undone.'))return;
+  $('sdStatus').textContent='Deleting saved brew records…';
+  try{const r=await fetch('/api/brews/delete',{method:'POST'}),d=await r.json();
+    if(r.ok){$('sdStatus').textContent=(d.deleted||0)+' saved brew record'+(d.deleted===1?'':'s')+' deleted.';lastBrewRefresh=0;await refreshBrews()}
+    else if(d.error==='brew_recording')$('sdStatus').textContent='A brew is recording. Reset or finish it before deleting saved records.';
+    else $('sdStatus').textContent='Could not delete the saved brew records.';
+  }catch(e){$('sdStatus').textContent='Could not delete the saved brew records.'}
+}
+function calculate(){
+  const dose=Math.max(.1,Number($('dose').value||0)), bev=Math.max(0,Number($('beverage').value||0)), tds=Math.max(0,Number($('tds').value||0));
+  const solids=bev*tds/100, ey=solids/dose*100, ratio=lastTarget/dose;
+  $('ey').textContent=ey.toFixed(1)+'%'; $('solids').textContent=solids.toFixed(2)+' g'; $('ratio').textContent='1:'+ratio.toFixed(1);
+  $('interpretation').textContent=ey<18?'Below the classic 18–22% reference band; taste and extraction evenness still matter.':ey>22?'Above the classic 18–22% reference band; taste and extraction evenness still matter.':'Within the classic 18–22% extraction reference band; this is not a guarantee of flavor quality.';
+}
+async function loadCalculatorPrefs(){
+  try{const r=await fetch('/api/extraction',{cache:'no-store'}),saved=await r.json();
+    ['dose','beverage','tds'].forEach(id=>{if(saved[id]!==undefined&&Number.isFinite(Number(saved[id])))$(id).value=saved[id]});calculate();
+  }catch(e){}
+}
+async function saveCalculatorPrefs(){
+  const params=new URLSearchParams({dose:$('dose').value,beverage:$('beverage').value,tds:$('tds').value});
+  try{await fetch('/api/extraction?'+params.toString(),{method:'POST'})}catch(e){}
+}
+function scheduleCalculatorSave(){if(calculatorSaveTimer)clearTimeout(calculatorSaveTimer);calculatorSaveTimer=setTimeout(()=>{calculatorSaveTimer=null;saveCalculatorPrefs()},600)}
+function draw(){
+  const c=$('chart'),dpr=Math.min(2,window.devicePixelRatio||1),w=Math.max(280,c.clientWidth),h=c.clientHeight;
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(h*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(h*dpr)}
+  const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const L=43,R=43,T=25,B=38,pw=w-L-R,ph=h-T-B;
+  x.strokeStyle='#1e293b';x.lineWidth=1;x.fillStyle='#64748b';x.font='10px sans-serif';
+  for(let i=0;i<=4;i++){const y=T+ph*i/4;x.beginPath();x.moveTo(L,y);x.lineTo(L+pw,y);x.stroke();x.fillText(Math.round(lastTarget*(1-i/4))+'g',2,y+3)}
+  x.fillStyle='#fbbf24';x.textAlign='left';x.font='bold 10px sans-serif';x.fillText('Weight (g)',L,T-9);
+  x.fillStyle='#38bdf8';x.textAlign='right';x.fillText('Flow (g/s)',L+pw,T-9);x.font='10px sans-serif';
+  if(points.length<2){x.fillStyle='#64748b';x.textAlign='center';x.fillText('Waiting for brew data…',L+pw/2,T+ph/2);x.fillText('Time (mm:ss)',L+pw/2,h-2);x.textAlign='left';return}
+  const t0=points[0].t,t1=Math.max(t0+1000,points[points.length-1].t),maxW=Math.max(lastTarget,1),maxF=Math.max(5,...points.map(p=>Math.abs(p.f)));
+  const duration=t1-t0;x.textAlign='center';x.fillStyle='#64748b';
+  for(let i=0;i<=4;i++){const px=L+pw*i/4;x.beginPath();x.moveTo(px,T);x.lineTo(px,T+ph);x.strokeStyle='#1e293b';x.stroke();x.fillText(fmt(duration*i/4),px,T+ph+16)}
+  x.fillText('Time (mm:ss)',L+pw/2,h-2);x.textAlign='left';
+  function line(key,color,max){x.beginPath();points.forEach((p,i)=>{const px=L+(p.t-t0)/(t1-t0)*pw,py=T+ph-Math.max(0,p[key])/max*ph;i?x.lineTo(px,py):x.moveTo(px,py)});x.strokeStyle=color;x.lineWidth=2;x.stroke()}
+  line('w','#fbbf24',maxW);line('f','#38bdf8',maxF);
+  x.fillStyle='#38bdf8';x.textAlign='right';x.fillText(maxF.toFixed(1),w-2,T+3);x.fillText('0',w-2,T+ph+3);x.textAlign='left';
+}
+async function poll(){
+  if(stopped)return;
+  try{aborter=new AbortController();const r=await fetch('/api/status',{cache:'no-store',signal:aborter.signal});const d=await r.json();
+    const elapsed=Number(d.elapsed_ms||0),w=Math.max(0,Number(d.weight_g||0)),f=Number(d.flow_gps||0);lastWeight=w;lastTarget=Math.max(1,Number(d.target_g||320));
+    if(elapsed+1000<lastElapsed)points.length=0;lastElapsed=elapsed;
+    if(!viewingSaved&&(d.running||elapsed>0)){points.push({t:elapsed,w,f});if(points.length>360)points.shift()}
+    $('elapsed').textContent=fmt(elapsed);$('weight').textContent=w.toFixed(1)+' g';$('flow').textContent=f.toFixed(2)+' g/s';
+    const active=points.filter(p=>p.f>0.05);$('avgFlow').textContent=(active.length?active.reduce((a,p)=>a+p.f,0)/active.length:0).toFixed(2);$('peakFlow').textContent=(points.length?Math.max(0,...points.map(p=>p.f)):0).toFixed(2);$('stage').textContent=d.stage_name||'Target';
+    if(Date.now()-lastBrewRefresh>5000)refreshBrews();
+    draw();calculate();
+  }catch(e){}finally{aborter=null;if(!stopped)timer=setTimeout(poll,850)}
+}
+['dose','beverage','tds'].forEach(id=>$(id).addEventListener('input',()=>{scheduleCalculatorSave();calculate()}));window.addEventListener('resize',draw);window.addEventListener('pagehide',()=>{if(calculatorSaveTimer)saveCalculatorPrefs();stopPolling()});calculate();loadCalculatorPrefs();draw();refreshBrews();poll();
+</script>
+</body>
+</html>
+)HTML";
+}
+
 String WebDashboard::build_recipes_html() const {
     return R"HTML(
 <!doctype html>
@@ -1345,9 +1664,10 @@ String WebDashboard::build_recipes_html() const {
     body { margin:0; background:radial-gradient(circle at 50% -10%, rgba(56,189,248,.12), transparent 34%), #020617; color:#fff; min-height:100vh; min-height:100dvh; }
     .app { width:min(540px,100%); margin:0 auto; padding:16px; }
     .card { background:linear-gradient(180deg, rgba(15,23,42,.98), rgba(8,13,24,.98)); border:1px solid #1e293b; border-radius:30px; padding:22px 18px; box-shadow:0 24px 70px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
-    .top { display:grid; grid-template-columns:1fr; gap:12px; color:#94a3b8; font-size:14px; margin-bottom:16px; }
-    .top div { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
-    .top a { color:#cbd5e1; text-align:center; text-decoration:none; border:1px solid #334155; padding:10px 8px; border-radius:999px; font-weight:850; background:rgba(2,6,23,.42); }
+    .top { margin-bottom:16px; }
+    .tabs { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin-bottom:18px; padding:4px; border:1px solid #1e293b; border-radius:16px; background:rgba(2,6,23,.58); }
+    .tab { color:#64748b; text-align:center; text-decoration:none; padding:10px 4px; border-radius:12px; font-size:12px; font-weight:850; }
+    .tab.active { color:#fff; background:#334155; box-shadow:0 4px 14px rgba(0,0,0,.25); }
     h1 { margin:0; font-size:24px; }
     label { display:block; color:#94a3b8; font-size:12px; font-weight:800; margin:0 0 6px; letter-spacing:.05em; text-transform:uppercase; }
     input, select { width:100%; border:1px solid #334155; background:#020617; color:#fff; border-radius:14px; padding:12px 10px; font-size:16px; font-weight:750; text-align:center; min-height:46px; }
@@ -1360,14 +1680,14 @@ String WebDashboard::build_recipes_html() const {
     .preset-row button { margin-top:0; padding:12px 8px; min-height:46px; font-size:13px; background:#1e293b; }
     .hint { color:#64748b; font-size:13px; line-height:1.35; margin-top:10px; }
     .meta { color:#64748b; text-align:center; margin-top:12px; font-size:12px; }
-    @media (min-width:430px) { .top { grid-template-columns:1fr auto; align-items:center; } .top div { grid-template-columns:auto auto auto; } .top a { min-width:92px; } }
     @media (max-width:390px) { .app{padding:10px 8px}.card{border-radius:24px;padding:18px 12px}.stage{grid-template-columns:1fr 82px 82px;gap:6px}.grid2{grid-template-columns:1fr 92px} input,select{font-size:14px;padding:10px 6px;} }
   </style>
 </head>
 <body>
   <main class="app">
     <section class="card">
-      <div class="top"><h1>Recipes</h1><div><a href="/settings">Settings</a> <a href="/wifi">WiFi</a> <a href="/">Dashboard</a></div></div>
+      <nav class="tabs" aria-label="Main navigation"><a class="tab" href="/">Dashboard</a><a class="tab active" href="/recipes" aria-current="page">Recipes</a><a class="tab" href="/analytics">Analytics</a><a class="tab" href="/settings">Settings</a><a class="tab" href="/wifi">WiFi</a></nav>
+      <div class="top"><h1>Recipes</h1></div>
       <div class="grid2">
         <div><label for="recipeName">Recipe name</label><input id="recipeName" maxlength="22" value="Generic Pour Over"></div>
         <div><label for="finalTarget">Final g</label><input id="finalTarget" type="number" min="50" max="5000" step="1" value="320"></div>

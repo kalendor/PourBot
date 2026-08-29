@@ -33,11 +33,23 @@
 // If no saved WiFi exists, the scale starts the fallback setup access point.
 #define HW_WIFI_STA_SSID ""
 #define HW_WIFI_STA_PASSWORD ""
-#define HW_WIFI_HOSTNAME "pouroverscale"
+#define HW_WIFI_HOSTNAME "pourbot"
 #define HW_WIFI_CONNECT_TIMEOUT_MS 15000
 
+// Local clock used for timestamped SD brew-log filenames. This POSIX timezone
+// observes Eastern daylight/standard time automatically.
+#define HW_TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
+#define HW_NTP_SERVER_1 "pool.ntp.org"
+#define HW_NTP_SERVER_2 "time.nist.gov"
+
+// Local clock used for timestamped SD brew-log filenames. This POSIX timezone
+// observes Eastern daylight/standard time automatically.
+#define HW_TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
+#define HW_NTP_SERVER_1 "pool.ntp.org"
+#define HW_NTP_SERVER_2 "time.nist.gov"
+
 // Fallback mode: if home Wi-Fi fails, the ESP32 creates this access point.
-#define HW_WIFI_AP_SSID "PouroverScale"
+#define HW_WIFI_AP_SSID "pourbot"
 #define HW_WIFI_AP_PASSWORD ""
 
 // Battery / power monitor using the Waveshare ADC voltage sense path.
@@ -47,6 +59,11 @@
 #define HW_BATTERY_ADC_PIN 4
 #define HW_BATTERY_ADC_SAMPLES 16
 #define HW_BATTERY_READ_INTERVAL_MS 1000
+
+// Onboard TF card in 1-bit SDMMC mode.
+#define HW_SD_CLK_PIN 41
+#define HW_SD_CMD_PIN 39
+#define HW_SD_D0_PIN  40
 
 // 4.9V / 1900 raw counts ≈ 0.00258 V per raw count.
 #define HW_BATTERY_ADC_RAW_TO_SYSTEM_V 0.00258f
