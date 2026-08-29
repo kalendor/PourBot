@@ -1078,51 +1078,6 @@ String WebDashboard::build_settings_html() const {
       <div class="top"><h1>Settings</h1></div>
 
       <div class="section">
-        <h2>Target Weight</h2>
-        <div class="target">
-          <div>
-            <label for="targetInput">Manual target water</label>
-            <input id="targetInput" type="number" min="10" max="5000" step="1" value="320" aria-label="Target water grams">
-          </div>
-          <button class="primary" onclick="applyManualTarget()">APPLY</button>
-        </div>
-        <div class="hint">Use this exactly like the current target entry. Brew ratio below is optional.</div>
-      </div>
-
-      <div class="section">
-        <h2>Brew Ratio</h2>
-        <div class="grid2">
-          <div>
-            <label for="doseInput">Coffee dose</label>
-            <input id="doseInput" type="number" min="1" max="250" step="0.1" value="20" aria-label="Coffee dose grams" oninput="updateRatioTarget()">
-          </div>
-          <div>
-            <label for="ratioSelect">Ratio</label>
-            <select id="ratioSelect" onchange="ratioChanged()" aria-label="Brew ratio">
-              <option value="15">15:1</option>
-              <option value="16" selected>16:1</option>
-              <option value="17">17:1</option>
-              <option value="18">18:1</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-        </div>
-        <div id="customRatioWrap" style="display:none;margin-top:12px;">
-          <label for="customRatioInput">Custom ratio</label>
-          <input id="customRatioInput" type="number" min="1" max="40" step="0.1" value="16" aria-label="Custom brew ratio" oninput="updateRatioTarget()">
-        </div>
-        <div class="preset">
-          <button onclick="setRatio(15)">15:1</button>
-          <button onclick="setRatio(16)">16:1</button>
-          <button onclick="setRatio(17)">17:1</button>
-          <button onclick="setRatio(18)">18:1</button>
-        </div>
-        <div class="result"><span>Calculated target</span><span id="ratioTargetText">320g</span></div>
-        <button class="primary" style="width:100%;margin-top:12px;" onclick="applyRatioTarget()">USE CALCULATED TARGET</button>
-        <div class="hint">Formula: coffee dose × brew ratio = target water weight.</div>
-      </div>
-
-      <div class="section">
         <h2>Battery Status</h2>
         <div class="battery-grid">
           <div class="battery-stat"><span>Power source</span><strong id="batterySource">Checking...</strong></div>
@@ -1168,12 +1123,6 @@ String WebDashboard::build_settings_html() const {
   </main>
 <script>
 const el = {
-  targetInput: document.getElementById('targetInput'),
-  doseInput: document.getElementById('doseInput'),
-  ratioSelect: document.getElementById('ratioSelect'),
-  customRatioWrap: document.getElementById('customRatioWrap'),
-  customRatioInput: document.getElementById('customRatioInput'),
-  ratioTargetText: document.getElementById('ratioTargetText'),
   knownInput: document.getElementById('knownInput'),
   batterySource: document.getElementById('batterySource'),
   batteryPercent: document.getElementById('batteryPercent'),
@@ -1190,7 +1139,6 @@ const el = {
   meta: document.getElementById('meta')
 };
 let settingsStatusInFlight = false;
-let lastTargetFromScale = 320;
 let settingsStatusAbort = null;
 let settingsStatusTimer = null;
 let settingsPollingStopped = false;
@@ -1210,37 +1158,6 @@ async function pollSettings() {
   await update();
   if (!settingsPollingStopped) settingsStatusTimer = setTimeout(pollSettings, 1500);
 }
-
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-function activeRatio() {
-  if (el.ratioSelect.value === 'custom') return clamp(Number(el.customRatioInput.value || 16), 1, 40);
-  return Number(el.ratioSelect.value || 16);
-}
-function calculatedTarget() {
-  const dose = clamp(Number(el.doseInput.value || 0), 1, 250);
-  return clamp(dose * activeRatio(), 10, 5000);
-}
-function updateRatioTarget() {
-  const target = calculatedTarget();
-  el.ratioTargetText.textContent = Math.round(target) + 'g';
-}
-function ratioChanged() {
-  el.customRatioWrap.style.display = (el.ratioSelect.value === 'custom') ? 'block' : 'none';
-  updateRatioTarget();
-}
-function setRatio(v) {
-  el.ratioSelect.value = String(v);
-  ratioChanged();
-}
-async function setTarget(v) {
-  const grams = clamp(Number(v || 320), 10, 5000);
-  try { await fetch('/api/target?g=' + encodeURIComponent(grams), {method:'POST'}); } catch(e) {}
-  lastTargetFromScale = grams;
-  el.targetInput.value = Math.round(grams);
-  update();
-}
-function applyManualTarget() { setTarget(el.targetInput.value); }
-function applyRatioTarget() { setTarget(Math.round(calculatedTarget())); }
 
 function updateBattery(d) {
   const valid = Boolean(d.battery_valid);
@@ -1321,9 +1238,7 @@ async function update() {
     settingsStatusAbort = new AbortController();
     const r = await fetch('/api/status', {cache:'no-store', signal:settingsStatusAbort.signal});
     const d = await r.json();
-    const target = Number(d.target_g || lastTargetFromScale || 320);
-    lastTargetFromScale = target;
-    if (document.activeElement !== el.targetInput) el.targetInput.value = Math.round(target);
+    const target = Number(d.target_g || 320);
     updateBattery(d);
     refreshOtaStatus();
     el.meta.textContent = 'Target ' + Math.round(target) + 'g · Weight ' + Number(d.weight_g || 0).toFixed(1) + 'g · ' + (d.running ? 'BREWING' : 'READY');
