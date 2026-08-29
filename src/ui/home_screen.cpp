@@ -6,7 +6,7 @@ static const lv_color_t COLOR_CARD     = lv_color_hex(0x05070B);
 static const lv_color_t COLOR_BORDER   = lv_color_hex(0x1F2937);
 static const lv_color_t COLOR_TEXT     = lv_color_hex(0xF8FAFC);
 static const lv_color_t COLOR_BURNT_ORANGE = lv_color_hex(0xCC5000);
-static const lv_color_t COLOR_HOLD_ORANGE  = lv_color_hex(0x8F5436);
+static const lv_color_t COLOR_STOP_RED     = lv_color_hex(0xD32F2F);
 static const lv_color_t COLOR_ORANGE_PRESSED = lv_color_hex(0x78350F);
 static const lv_color_t COLOR_GREEN    = lv_color_hex(0x4ADE80);
 static constexpr uint32_t START_BUTTON_HOLD_MS = 1000UL;
@@ -62,8 +62,7 @@ void HomeScreen::set_state_colors(bool running, float grams, const BrewRecipe& r
     (void)grams;
     (void)recipe;
 
-    // Keep holds visually distinct without the harsh red used previously.
-    const lv_color_t fill_accent = (stage && stage->holding) ? COLOR_HOLD_ORANGE : COLOR_BURNT_ORANGE;
+    const lv_color_t fill_accent = (stage && stage->holding) ? COLOR_STOP_RED : COLOR_BURNT_ORANGE;
     if (progress_panel) lv_obj_set_style_bg_color(progress_panel, fill_accent, LV_PART_INDICATOR);
     lv_obj_set_style_border_color(timer_box, COLOR_TEXT, 0);
     for (int i = 0; i < 7; i++) {
@@ -254,8 +253,14 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
 void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int, bool, bool, bool prebrew_pending, bool ready) {
     char buf[64];
 
-    snprintf(buf, sizeof(buf), "%.1f", grams);
-    lv_label_set_text(weight_label, buf);
+    if (stage.holding) {
+        lv_label_set_text(weight_label, "STOP");
+        if (grams_label) lv_obj_add_flag(grams_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        snprintf(buf, sizeof(buf), "%.1f", grams);
+        lv_label_set_text(weight_label, buf);
+        if (grams_label) lv_obj_clear_flag(grams_label, LV_OBJ_FLAG_HIDDEN);
+    }
 
     uint32_t minutes = elapsed_ms / 60000UL;
     uint32_t seconds = (elapsed_ms / 1000UL) % 60UL;
