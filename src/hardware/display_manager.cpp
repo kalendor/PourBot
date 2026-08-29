@@ -6,6 +6,8 @@
 
 DisplayManager* g_display_manager = nullptr;
 
+extern const uint8_t pourbot_logo_start[] asm("_binary_assets_pourbot_logo_rgb565_start");
+
 void DisplayManager::init() {
     g_display_manager = this;
 
@@ -65,6 +67,15 @@ void DisplayManager::update() {
     if (!initialized) return;
     touch_driver.update();
     lv_timer_handler();
+}
+
+void DisplayManager::show_boot_logo(uint32_t duration_ms) {
+    if (!initialized || !gfx_device) return;
+    gfx_device->fillScreen(RGB565_BLACK);
+    gfx_device->draw16bitRGBBitmap(
+        20, 48, reinterpret_cast<const uint16_t*>(pourbot_logo_start), 240, 360);
+    delay(duration_ms);
+    gfx_device->fillScreen(RGB565_BLACK);
 }
 
 void DisplayManager::display_rounder_cb(lv_event_t* e) {

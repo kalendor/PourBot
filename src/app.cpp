@@ -34,6 +34,7 @@ static bool web_recipe_cb(const BrewRecipe& recipe) { return g_app ? g_app->set_
 void App::begin() {
     g_app = this;
     display.init();
+    display.show_boot_logo();
     Serial.println(FIRMWARE_NAME " " FIRMWARE_VERSION " - hold cue amber pulse");
 
     settings.begin();

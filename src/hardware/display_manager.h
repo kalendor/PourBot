@@ -7,6 +7,7 @@
 class DisplayManager {
 public:
     void init();
+    void show_boot_logo(uint32_t duration_ms = 1800);
     void update();
     void set_brightness(float brightness);
     bool is_initialized() const { return initialized; }
