@@ -4,6 +4,8 @@
 #include "config/version.h"
 #include "storage/brew_log_store.h"
 #include "ui/amoled_theme.h"
+#include <esp_sleep.h>
+#include <driver/gpio.h>
 
 App* g_app = nullptr;
 
@@ -41,6 +43,10 @@ void App::begin() {
     settings.begin();
     amoled_theme.begin();
     power.begin();
+    start_pause_button.pin = HW_START_PAUSE_BUTTON_PIN;
+    tare_sleep_button.pin = HW_TARE_SLEEP_BUTTON_PIN;
+    pinMode(start_pause_button.pin, INPUT_PULLUP);
+    pinMode(tare_sleep_button.pin, INPUT_PULLUP);
     const float default_calibration_factor = -7050.0f;
     const float saved_calibration_factor = settings.load_calibration_factor(default_calibration_factor);
     settings.load_recipe(recipe);
@@ -73,6 +79,7 @@ void App::show_calibration() {
 }
 
 void App::update() {
+    update_hardware_buttons();
     display.update();
     scale.update();
     power.update();
@@ -133,6 +140,58 @@ void App::tare() {
     if (screen == Screen::Calibration) {
         calibration_message = ok ? "Tared. Place known weight." : "Tare failed. Try again.";
     }
+}
+
+bool App::update_button(HardwareButton& button, uint32_t now) {
+    const bool raw_pressed = digitalRead(button.pin) == LOW;
+    if (raw_pressed != button.raw_pressed) {
+        button.raw_pressed = raw_pressed;
+        button.raw_changed_ms = now;
+    }
+
+    if (raw_pressed != button.pressed && (now - button.raw_changed_ms) >= HW_BUTTON_DEBOUNCE_MS) {
+        button.pressed = raw_pressed;
+        if (button.pressed) button.pressed_ms = now;
+        else return true;
+    }
+    return false;
+}
+
+void App::update_hardware_buttons() {
+    const uint32_t now = millis();
+
+    if (update_button(start_pause_button, now)) {
+        const uint32_t held_ms = now - start_pause_button.pressed_ms;
+        if (held_ms >= HW_RESET_HOLD_MS) reset_brew();
+        else toggle_brew();
+    }
+
+    if (update_button(tare_sleep_button, now)) {
+        const uint32_t held_ms = now - tare_sleep_button.pressed_ms;
+        if (held_ms >= HW_SLEEP_HOLD_MS) enter_sleep();
+        else tare();
+    }
+}
+
+void App::enter_sleep() {
+    Serial.println("Entering light sleep; press TARE to wake");
+    display.sleep();
+    Serial.flush();
+
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(HW_TARE_SLEEP_BUTTON_PIN), 0);
+    esp_light_sleep_start();
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT0);
+
+    // Consume the waking press so it cannot also trigger a tare or sleep.
+    while (digitalRead(HW_TARE_SLEEP_BUTTON_PIN) == LOW) delay(5);
+    delay(HW_BUTTON_DEBOUNCE_MS);
+    tare_sleep_button.raw_pressed = false;
+    tare_sleep_button.pressed = false;
+    tare_sleep_button.raw_changed_ms = millis();
+
+    display.wake();
+    Serial.println("Woke from light sleep");
 }
 
 void App::toggle_brew() {

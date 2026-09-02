@@ -64,9 +64,22 @@ void DisplayManager::init() {
 }
 
 void DisplayManager::update() {
-    if (!initialized) return;
+    if (!initialized || sleeping) return;
     touch_driver.update();
     lv_timer_handler();
+}
+
+void DisplayManager::sleep() {
+    if (!initialized || !gfx_device || sleeping) return;
+    sleeping = true;
+    gfx_device->displayOff();
+}
+
+void DisplayManager::wake() {
+    if (!initialized || !gfx_device || !sleeping) return;
+    gfx_device->displayOn();
+    sleeping = false;
+    if (lvgl_display) lv_obj_invalidate(lv_screen_active());
 }
 
 void DisplayManager::show_boot_logo(uint32_t duration_ms) {

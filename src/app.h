@@ -29,6 +29,14 @@ public:
     void set_target_water(float grams);
     bool set_recipe_from_web(const BrewRecipe& new_recipe);
 private:
+    struct HardwareButton {
+        uint8_t pin = 0;
+        bool raw_pressed = false;
+        bool pressed = false;
+        uint32_t raw_changed_ms = 0;
+        uint32_t pressed_ms = 0;
+    };
+
     enum class Screen { Home, Settings, Calibration } screen = Screen::Home;
     DisplayManager display;
     HX711Scale scale;
@@ -43,6 +51,12 @@ private:
     PowerMonitor power;
     uint32_t last_ui_ms = 0;
     uint32_t last_web_state_ms = 0;
+    HardwareButton start_pause_button;
+    HardwareButton tare_sleep_button;
+
+    void update_hardware_buttons();
+    bool update_button(HardwareButton& button, uint32_t now);
+    void enter_sleep();
 
     float known_calibration_weight_g = 100.0f;
     const char* calibration_message = "Ready";

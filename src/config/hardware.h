@@ -25,6 +25,13 @@
 #define HW_LOADCELL_DOUT_PIN 3
 #define HW_LOADCELL_SCK_PIN  2
 
+// External buttons are wired between GPIO and ground and use internal pull-ups.
+#define HW_START_PAUSE_BUTTON_PIN 5
+#define HW_TARE_SLEEP_BUTTON_PIN  6
+#define HW_BUTTON_DEBOUNCE_MS     35
+#define HW_RESET_HOLD_MS          1000
+#define HW_SLEEP_HOLD_MS          2000
+
 #define HW_SERIAL_BAUD_RATE 115200
 #define DEBUG_SUPPRESS_TOUCH_I2C_ERRORS 1
 

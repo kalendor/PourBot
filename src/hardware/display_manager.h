@@ -10,6 +10,8 @@ public:
     void show_boot_logo(uint32_t duration_ms = 1800);
     void update();
     void set_brightness(float brightness);
+    void sleep();
+    void wake();
     bool is_initialized() const { return initialized; }
     TouchData get_touch_data() const { return touch_driver.get_touch_data(); }
     uint32_t width() const { return screen_width; }
@@ -28,6 +30,7 @@ private:
     uint32_t screen_height = 0;
     uint32_t buffer_size = 0;
     bool initialized = false;
+    bool sleeping = false;
 
     static void display_flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map);
     static void display_rounder_cb(lv_event_t* e);
