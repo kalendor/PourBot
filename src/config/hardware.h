@@ -49,12 +49,6 @@
 #define HW_NTP_SERVER_1 "pool.ntp.org"
 #define HW_NTP_SERVER_2 "time.nist.gov"
 
-// Local clock used for timestamped SD brew-log filenames. This POSIX timezone
-// observes Eastern daylight/standard time automatically.
-#define HW_TIMEZONE "EST5EDT,M3.2.0,M11.1.0"
-#define HW_NTP_SERVER_1 "pool.ntp.org"
-#define HW_NTP_SERVER_2 "time.nist.gov"
-
 // Fallback mode: if home Wi-Fi fails, the ESP32 creates this access point.
 #define HW_WIFI_AP_SSID "pourbot"
 #define HW_WIFI_AP_PASSWORD ""

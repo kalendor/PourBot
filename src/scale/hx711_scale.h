@@ -14,6 +14,8 @@ public:
     float flow_gps() const { return flow_gps_filtered; }
     float calibration_factor() const { return cal_factor; }
     long zero_offset() const { return zero_raw_offset; }
+    void power_down();
+    void power_up();
     void set_calibration_factor(float factor);
     bool calibrate_with_known_weight(float known_grams, float& new_factor);
 

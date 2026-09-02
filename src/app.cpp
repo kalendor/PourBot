@@ -174,8 +174,16 @@ void App::update_hardware_buttons() {
 }
 
 void App::enter_sleep() {
+    // Never let light-sleep time advance an active brew. Leave it paused after
+    // wake so the user explicitly decides when pouring should resume.
+    if (brew.is_running()) {
+        brew.pause();
+        Serial.println("Active brew paused for sleep");
+    }
+
     Serial.println("Entering light sleep; press TARE to wake");
     display.sleep();
+    scale.power_down();
     Serial.flush();
 
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
@@ -190,6 +198,7 @@ void App::enter_sleep() {
     tare_sleep_button.pressed = false;
     tare_sleep_button.raw_changed_ms = millis();
 
+    scale.power_up();
     display.wake();
     Serial.println("Woke from light sleep");
 }

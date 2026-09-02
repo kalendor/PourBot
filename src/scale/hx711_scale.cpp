@@ -170,6 +170,19 @@ void HX711Scale::set_calibration_factor(float factor) {
     display_filter_initialized = false;
 }
 
+void HX711Scale::power_down() {
+    hx.power_down();
+    is_ready = false;
+}
+
+void HX711Scale::power_up() {
+    hx.power_up();
+    clear_samples();
+    flow_gps_filtered = 0.0f;
+    last_sample_ms = millis();
+    last_flow_ms = last_sample_ms;
+}
+
 bool HX711Scale::calibrate_with_known_weight(float known_grams, float& new_factor) {
     if (known_grams <= 0.0f) return false;
 
