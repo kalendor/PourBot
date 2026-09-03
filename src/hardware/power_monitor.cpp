@@ -6,6 +6,11 @@ void PowerMonitor::begin() {
     filtered_voltage_v = 0.0f;
     filtered_percent = -1.0f;
     current = PowerStatus{};
+#if HW_CHARGE_STATUS_ENABLED
+    pinMode(HW_CHARGE_STATUS_PIN, INPUT_PULLUP);
+    Serial.printf("Charge status init: TP4057 CHRG on GPIO%d (active %s)\n",
+                  HW_CHARGE_STATUS_PIN, HW_CHARGE_STATUS_ACTIVE_LOW ? "LOW" : "HIGH");
+#endif
 #if HW_BATTERY_ADC_ENABLED
     // Use Arduino analogRead for this board. The Waveshare schematic shows BAT_ADC on IO4.
     // The ESP-IDF oneshot path returned 0 on some Arduino-core builds, while analogRead
@@ -19,10 +24,18 @@ void PowerMonitor::begin() {
 }
 
 void PowerMonitor::update() {
-#if HW_BATTERY_ADC_ENABLED
     const uint32_t now = millis();
     if (now - last_read_ms < HW_BATTERY_READ_INTERVAL_MS) return;
     last_read_ms = now;
+
+#if HW_CHARGE_STATUS_ENABLED
+    const bool charge_pin_high = digitalRead(HW_CHARGE_STATUS_PIN) == HIGH;
+    current.charge_estimate = HW_CHARGE_STATUS_ACTIVE_LOW ? !charge_pin_high : charge_pin_high;
+#else
+    current.charge_estimate = false;
+#endif
+
+#if HW_BATTERY_ADC_ENABLED
 
     int raw = 0;
     float pin_v = 0.0f;
@@ -36,7 +49,6 @@ void PowerMonitor::update() {
         current.valid = false;
         current.percent = -1;
         current.percent_valid = false;
-        current.charge_estimate = false;
         Serial.printf("Power ADC invalid: gpio=%d raw=%d pin=%.3fV sys=%.3fV\n", HW_BATTERY_ADC_PIN, raw, pin_v, voltage);
         return;
     }
@@ -49,8 +61,9 @@ void PowerMonitor::update() {
 
     // This Waveshare ADC reading behaves like system/USB rail voltage when USB-C is plugged in.
     // In that condition it is NOT a reliable battery voltage, so don't convert it to 100%.
-    current.charge_estimate = filtered_voltage_v >= HW_USB_POWER_ESTIMATE_V;
-    if (current.charge_estimate) {
+    // Keep this decision separate from the TP4057's real charging-state input.
+    const bool usb_power_present = filtered_voltage_v >= HW_USB_POWER_ESTIMATE_V;
+    if (usb_power_present) {
         current.percent = last_battery_percent;      // preserve last known battery estimate if available
         current.percent_valid = (last_battery_percent >= 0);
     } else {

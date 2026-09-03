@@ -61,6 +61,12 @@
 #define HW_BATTERY_ADC_SAMPLES 16
 #define HW_BATTERY_READ_INTERVAL_MS 1000
 
+// TP4057 CHRG is an open-drain, active-low output. GPIO7 has an external
+// 10 kOhm pull-up to 3.3V: LOW means the battery is actively charging.
+#define HW_CHARGE_STATUS_ENABLED 1
+#define HW_CHARGE_STATUS_PIN 7
+#define HW_CHARGE_STATUS_ACTIVE_LOW 1
+
 // Onboard TF card in 1-bit SDMMC mode.
 #define HW_SD_CLK_PIN 41
 #define HW_SD_CMD_PIN 39
@@ -69,6 +75,7 @@
 // 4.9V / 1900 raw counts ≈ 0.00258 V per raw count.
 #define HW_BATTERY_ADC_RAW_TO_SYSTEM_V 0.00258f
 
-// The board exposes system voltage, not a dedicated charge-status pin.
 // USB power usually reads above this level; LiPo battery reads 3.3–4.2V.
+// This threshold is used only to avoid interpreting the USB/system rail as
+// battery percentage. Charging state comes from the TP4057 CHRG input above.
 #define HW_USB_POWER_ESTIMATE_V 4.45f
