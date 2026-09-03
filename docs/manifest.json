@@ -1,6 +1,6 @@
 {
   "name": "PourBot",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "new_install_prompt_erase": false,
   "builds": [
     {
@@ -19,7 +19,7 @@
           "offset": 57344
         },
         {
-          "path": "firmware/pourbot-1.2.7.bin",
+          "path": "firmware/pourbot-1.2.8.bin",
           "offset": 65536
         }
       ]

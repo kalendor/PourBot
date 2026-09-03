@@ -11,10 +11,10 @@ App* g_app = nullptr;
 
 namespace {
 // At the common HX711 10 SPS rate, 16 samples makes an ordinary tare take about
-// 1.6 seconds. Five samples still average electrical noise while bringing the
-// expected response below about 0.6 seconds. Calibration uses more samples
+// 1.6 seconds. Three samples still average electrical noise while bringing the
+// expected response near 0.3 seconds. Calibration uses more samples
 // because zero accuracy matters more there than button latency.
-constexpr uint8_t kQuickTareSamples = 5;
+constexpr uint8_t kQuickTareSamples = 3;
 constexpr uint8_t kCalibrationTareSamples = 12;
 
 bool hardware_control_touched(uint8_t pin) {
