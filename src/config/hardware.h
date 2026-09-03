@@ -30,6 +30,7 @@
 #define HW_TARE_SLEEP_BUTTON_PIN  6
 #define HW_BUTTON_ACTIVE_LOW      0
 #define HW_BUTTON_DEBOUNCE_MS     15
+#define HW_TOUCH_RELEASE_SETTLE_MS 200
 #define HW_RESET_HOLD_MS          1000
 #define HW_SLEEP_HOLD_MS          2000
 

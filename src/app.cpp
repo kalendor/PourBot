@@ -171,13 +171,23 @@ void App::update_hardware_buttons() {
     if (update_button(start_pause_button, now)) {
         const uint32_t held_ms = now - start_pause_button.pressed_ms;
         if (held_ms >= HW_RESET_HOLD_MS) reset_brew();
-        else toggle_brew();
+        else {
+            // A fresh start performs an automatic tare. Let enclosure motion and
+            // the capacitive sensor output settle after the finger is removed.
+            if (!brew.is_running() && brew.elapsed_ms() == 0) delay(HW_TOUCH_RELEASE_SETTLE_MS);
+            toggle_brew();
+        }
     }
 
     if (update_button(tare_sleep_button, now)) {
         const uint32_t held_ms = now - tare_sleep_button.pressed_ms;
         if (held_ms >= HW_SLEEP_HOLD_MS) enter_sleep();
-        else tare();
+        else {
+            // The web tare has no physical disturbance. A touch-initiated tare
+            // needs a brief release interval before HX711 samples are captured.
+            delay(HW_TOUCH_RELEASE_SETTLE_MS);
+            tare();
+        }
     }
 }
 
