@@ -8,7 +8,9 @@ struct PowerStatus {
     int percent = 0;              // -1 means percent unknown while USB/system rail is present
     bool percent_valid = false;
     bool valid = false;
-    bool charge_estimate = false; // True hardware state when TP4057 CHRG is enabled
+    bool charge_status_available = false;
+    bool charging = false;        // TP4057 CHRG is asserted (active-low on GPIO7)
+    bool external_power_present = false;
     int raw_adc = 0;
     float pin_voltage_v = 0.0f;
 };

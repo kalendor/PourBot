@@ -18,7 +18,9 @@ struct WebDashboardState {
     float battery_pin_voltage_v = 0.0f;
     bool battery_valid = false;
     bool battery_percent_valid = false;
+    bool charge_status_available = false;
     bool charging = false;
+    bool external_power_present = false;
     bool prebrew_pending = false;
     bool pour_ready = false;
     const char* screen_name = "Home";

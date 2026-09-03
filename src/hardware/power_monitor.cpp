@@ -8,6 +8,7 @@ void PowerMonitor::begin() {
     current = PowerStatus{};
 #if HW_CHARGE_STATUS_ENABLED
     pinMode(HW_CHARGE_STATUS_PIN, INPUT_PULLUP);
+    current.charge_status_available = true;
     Serial.printf("Charge status init: TP4057 CHRG on GPIO%d (active %s)\n",
                   HW_CHARGE_STATUS_PIN, HW_CHARGE_STATUS_ACTIVE_LOW ? "LOW" : "HIGH");
 #endif
@@ -30,10 +31,15 @@ void PowerMonitor::update() {
 
 #if HW_CHARGE_STATUS_ENABLED
     const bool charge_pin_high = digitalRead(HW_CHARGE_STATUS_PIN) == HIGH;
-    current.charge_estimate = HW_CHARGE_STATUS_ACTIVE_LOW ? !charge_pin_high : charge_pin_high;
+    current.charging = HW_CHARGE_STATUS_ACTIVE_LOW ? !charge_pin_high : charge_pin_high;
+    current.charge_status_available = true;
 #else
-    current.charge_estimate = false;
+    current.charging = false;
+    current.charge_status_available = false;
 #endif
+    // CHRG only indicates active charging. It returns inactive when charging is
+    // complete, so use the system-voltage sense below to identify USB power.
+    current.external_power_present = current.charging;
 
 #if HW_BATTERY_ADC_ENABLED
 
@@ -63,6 +69,7 @@ void PowerMonitor::update() {
     // In that condition it is NOT a reliable battery voltage, so don't convert it to 100%.
     // Keep this decision separate from the TP4057's real charging-state input.
     const bool usb_power_present = filtered_voltage_v >= HW_USB_POWER_ESTIMATE_V;
+    current.external_power_present = usb_power_present || current.charging;
     if (usb_power_present) {
         current.percent = last_battery_percent;      // preserve last known battery estimate if available
         current.percent_valid = (last_battery_percent >= 0);

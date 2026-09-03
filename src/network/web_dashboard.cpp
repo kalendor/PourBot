@@ -552,7 +552,9 @@ String WebDashboard::build_json() const {
     json += "\"battery_pin_voltage_v\":" + String(state.battery_pin_voltage_v, 3) + ",";
     json += "\"battery_valid\":" + String(state.battery_valid ? "true" : "false") + ",";
     json += "\"battery_percent_valid\":" + String(state.battery_percent_valid ? "true" : "false") + ",";
+    json += "\"charge_status_available\":" + String(state.charge_status_available ? "true" : "false") + ",";
     json += "\"charging\":" + String(state.charging ? "true" : "false") + ",";
+    json += "\"external_power_present\":" + String(state.external_power_present ? "true" : "false") + ",";
     json += "\"prebrew_pending\":" + String(state.prebrew_pending ? "true" : "false") + ",";
     json += "\"pour_ready\":" + String(state.pour_ready ? "true" : "false") + ",";
     json += "\"calibration_factor\":" + String(state.calibration_factor, 3) + ",";
@@ -886,11 +888,11 @@ function setBattery(d) {
   let label = 'PWR --';
   let width = '0%';
   if (valid) {
-    if (d.charging && !pctValid) {
+    if (d.external_power_present && !pctValid) {
       label = 'USB';
       color = 'var(--green)';
       width = '55%';
-    } else if (d.charging) {
+    } else if (d.external_power_present) {
       label = 'USB ' + pct + '%';
       color = 'var(--green)';
       width = pct + '%';
@@ -1148,10 +1150,10 @@ String WebDashboard::build_settings_html() const {
           <div class="battery-stat"><span>Power source</span><strong id="batterySource">Checking...</strong></div>
           <div class="battery-stat"><span>Charge</span><strong id="batteryPercent">--</strong></div>
           <div class="battery-stat"><span>System voltage</span><strong id="batteryVoltage">--</strong></div>
-          <div class="battery-stat"><span>Charging rate</span><strong id="chargeRate">Unavailable</strong></div>
+          <div class="battery-stat"><span>Charge status</span><strong id="chargeRate">Checking...</strong></div>
         </div>
         <div class="battery-health" id="batteryHealth">Reading power monitor...</div>
-        <div class="hint" id="batteryDetail">This board senses voltage but has no current sensor, so charging current and watts cannot be measured.</div>
+        <div class="hint" id="batteryDetail">GPIO 7 reads the TP4057 charging-status output. Charging current and watts require a separate current-sense IC.</div>
       </div>
 
       <div class="section">
@@ -1250,7 +1252,8 @@ async function pollSettings() {
 
 function updateBattery(d) {
   const valid = Boolean(d.battery_valid);
-  const usb = Boolean(d.charging);
+  const usb = Boolean(d.external_power_present);
+  const chargeStatusAvailable = Boolean(d.charge_status_available);
   const percentValid = Boolean(d.battery_percent_valid);
   const percent = Number(d.battery_percent);
   const voltage = Number(d.battery_voltage_v);
@@ -1260,7 +1263,7 @@ function updateBattery(d) {
   el.batterySource.textContent = !valid ? 'Unknown' : (usb ? 'USB power' : 'Battery');
   el.batteryPercent.textContent = percentValid ? Math.round(percent) + '%' : 'Unknown';
   el.batteryVoltage.textContent = valid ? voltage.toFixed(2) + ' V' : '--';
-  el.chargeRate.textContent = 'No sensor';
+  el.chargeRate.textContent = chargeStatusAvailable ? (d.charging ? 'Charging' : 'Not charging') : 'Unavailable';
   el.batteryHealth.className = 'battery-health';
 
   if (!valid) {
@@ -1280,7 +1283,7 @@ function updateBattery(d) {
     el.batteryHealth.classList.add('good');
   }
 
-  el.batteryDetail.textContent = 'ADC ' + raw + ' · sense pin ' + pinVoltage.toFixed(3) + ' V · true charge rate requires a current-sense IC.';
+  el.batteryDetail.textContent = 'ADC ' + raw + ' · sense pin ' + pinVoltage.toFixed(3) + ' V · GPIO 7 charge status: ' + (chargeStatusAvailable ? (d.charging ? 'active' : 'inactive') : 'unavailable') + '. Current and watts require a current-sense IC.';
 }
 
 function renderAmoledColors(d) {

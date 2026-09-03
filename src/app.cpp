@@ -118,7 +118,9 @@ void App::update() {
         web_state.battery_pin_voltage_v = power_status.pin_voltage_v;
         web_state.battery_valid = power_status.valid;
         web_state.battery_percent_valid = power_status.percent_valid;
-        web_state.charging = power_status.charge_estimate;
+        web_state.charge_status_available = power_status.charge_status_available;
+        web_state.charging = power_status.charging;
+        web_state.external_power_present = power_status.external_power_present;
         web_state.prebrew_pending = prep_pending;
         web_state.pour_ready = ready_to_pour;
         web_state.screen_name = (screen == Screen::Home) ? "Home" : (screen == Screen::Settings) ? "Settings" : "Calibration";
@@ -131,7 +133,7 @@ void App::update() {
     if (now - last_ui_ms >= 100) {
         last_ui_ms = now;
         if (screen == Screen::Home) {
-            home.update(ui_weight_g, current_flow_gps, brew.elapsed_ms(), brew.is_running(), recipe, stage_status, power_status.percent, power_status.percent_valid, power_status.charge_estimate, prep_pending, ready_to_pour);
+            home.update(ui_weight_g, current_flow_gps, brew.elapsed_ms(), brew.is_running(), recipe, stage_status, power_status.percent, power_status.percent_valid, power_status.charging, prep_pending, ready_to_pour);
         } else if (screen == Screen::Calibration) {
             calibration.update(current_weight_g, known_calibration_weight_g, scale.calibration_factor(), calibration_message);
         }
