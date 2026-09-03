@@ -878,6 +878,7 @@ function setBattery(d) {
   const battery = el.battery;
   const fill = el.batteryFill;
   const text = el.powerText;
+  if (!battery || !fill || !text) return;
   const pct = Math.max(0, Math.min(100, Number(d.battery_percent || 0)));
   const valid = !!d.battery_valid;
   const pctValid = !!d.battery_percent_valid;
@@ -1020,12 +1021,12 @@ async function update() {
     if (!holding) {
       el.dial.style.setProperty('--liquidSoft', complete ? 'rgba(34,197,94,.30)' : 'rgba(251,191,36,.28)');
     }
-    if (document.activeElement !== el.targetInput) el.targetInput.value = target.toFixed(0);
+    if (el.targetInput && document.activeElement !== el.targetInput) el.targetInput.value = target.toFixed(0);
     const brewStarted = Number(d.elapsed_ms || 0) > 0;
     el.startBtn.textContent = d.running ? 'PAUSE' : (brewStarted ? 'RESUME' : 'START');
     el.startBtn.className = d.running ? 'warn' : 'primary';
     el.liveLabel.textContent = d.running ? 'BREW' : 'LIVE';
-    el.wifiLabel.textContent = d.wifi_mode === 'AP' ? 'AP' : 'WiFi';
+    if (el.wifiLabel) el.wifiLabel.textContent = d.wifi_mode === 'AP' ? 'AP' : 'WiFi';
     setBattery(d);
     el.meta.textContent = (d.running ? 'BREWING' : (brewStarted ? 'PAUSED' : (pourReady ? 'READY TO POUR' : 'IDLE'))) + ' · IP ' + (d.ip || '--');
   } catch(e) {
@@ -1043,6 +1044,7 @@ async function cmd(name) {
   update();
 }
 async function setTarget() {
+  if (!el.targetInput) return;
   const v = Number(el.targetInput.value || 320);
   try { await fetch('/api/target?g=' + encodeURIComponent(v), {method:'POST'}); } catch(e) {}
   update();
