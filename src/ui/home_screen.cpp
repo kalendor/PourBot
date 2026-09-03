@@ -307,7 +307,8 @@ void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const Br
     }
 
     if (start_button_label) {
-        lv_label_set_text(start_button_label, running ? "PAUSE" : "START");
+        const char* control_text = running ? "PAUSE" : (elapsed_ms > 0 ? "RESUME" : "START");
+        lv_label_set_text(start_button_label, control_text);
     }
     if (stage_label) {
         if (brew_active) lv_obj_clear_flag(stage_label, LV_OBJ_FLAG_HIDDEN);

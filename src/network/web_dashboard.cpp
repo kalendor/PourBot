@@ -44,6 +44,7 @@ void WebDashboard::begin(ActionCallback tare_cb, ActionCallback start_cb, Action
 
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(HW_WIFI_HOSTNAME);
+    WiFi.setAutoReconnect(true);
     WiFi.setSleep(false);
 
     if (sta_ssid.length() > 0) {
@@ -173,37 +174,31 @@ void WebDashboard::set_state(const WebDashboardState& new_state) {
 
 void WebDashboard::handle_root() {
     server.sendHeader("Cache-Control", "no-store");
-    server.sendHeader("Connection", "close");
     server.send(200, "text/html", build_html());
 }
 
 void WebDashboard::handle_settings() {
     server.sendHeader("Cache-Control", "no-store");
-    server.sendHeader("Connection", "close");
     server.send(200, "text/html", build_settings_html());
 }
 
 void WebDashboard::handle_recipes() {
     server.sendHeader("Cache-Control", "no-store");
-    server.sendHeader("Connection", "close");
     server.send(200, "text/html", build_recipes_html());
 }
 
 void WebDashboard::handle_analytics() {
     server.sendHeader("Cache-Control", "no-store");
-    server.sendHeader("Connection", "close");
     server.send(200, "text/html", build_analytics_html());
 }
 
 void WebDashboard::handle_wifi() {
     server.sendHeader("Cache-Control", "no-store");
-    server.sendHeader("Connection", "close");
     server.send(200, "text/html", build_wifi_html());
 }
 
 void WebDashboard::handle_status() {
     server.sendHeader("Cache-Control", "no-store");
-    server.sendHeader("Connection", "close");
     server.send(200, "application/json", build_json());
 }
 
@@ -1018,12 +1013,13 @@ async function update() {
       el.dial.style.setProperty('--liquidSoft', complete ? 'rgba(34,197,94,.30)' : 'rgba(251,191,36,.28)');
     }
     if (document.activeElement !== el.targetInput) el.targetInput.value = target.toFixed(0);
-    el.startBtn.textContent = d.running ? 'PAUSE' : 'START';
+    const brewStarted = Number(d.elapsed_ms || 0) > 0;
+    el.startBtn.textContent = d.running ? 'PAUSE' : (brewStarted ? 'RESUME' : 'START');
     el.startBtn.className = d.running ? 'warn' : 'primary';
     el.liveLabel.textContent = d.running ? 'BREW' : 'LIVE';
     el.wifiLabel.textContent = d.wifi_mode === 'AP' ? 'AP' : 'WiFi';
     setBattery(d);
-    el.meta.textContent = (d.running ? 'BREWING' : (pourReady ? 'READY TO POUR' : 'IDLE')) + ' · IP ' + (d.ip || '--');
+    el.meta.textContent = (d.running ? 'BREWING' : (brewStarted ? 'PAUSED' : (pourReady ? 'READY TO POUR' : 'IDLE'))) + ' · IP ' + (d.ip || '--');
   } catch(e) {
     // Keep transient network failures visually quiet. Polling continues and the
     // next successful response refreshes the normal status automatically.
