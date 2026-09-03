@@ -540,6 +540,7 @@ String WebDashboard::build_json() const {
     String json;
     json.reserve(900);
     json += "{";
+    json += "\"firmware_version\":\"" FIRMWARE_VERSION "\",";
     json += "\"weight_g\":" + String(state.weight_g, 1) + ",";
     json += "\"flow_gps\":" + String(state.flow_gps, 2) + ",";
     json += "\"target_g\":" + String(state.target_g, 1) + ",";
@@ -932,6 +933,8 @@ let statusAbort = null;
 let statusTimer = null;
 let timerRenderTimer = null;
 let dashboardPollingStopped = false;
+const pageFirmwareVersion = (document.title.match(/\d+\.\d+\.\d+/) || [''])[0];
+let firmwareReloadRequested = false;
 
 function stopDashboardPolling() {
   dashboardPollingStopped = true;
@@ -976,6 +979,11 @@ async function update() {
     statusAbort = new AbortController();
     const r = await fetch('/api/status', {cache:'no-store', signal: statusAbort.signal});
     const d = await r.json();
+    if (!firmwareReloadRequested && pageFirmwareVersion && d.firmware_version && d.firmware_version !== pageFirmwareVersion) {
+      firmwareReloadRequested = true;
+      window.location.replace('/?firmware=' + encodeURIComponent(d.firmware_version));
+      return;
+    }
     const w = Number(d.weight_g || 0);
     const target = Math.max(1, Number(d.target_g || 320));
     const prebrewPending = !!d.prebrew_pending;
