@@ -5,8 +5,8 @@
 
 class HomeScreen {
 public:
-    void create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_event_cb_t start_cb, lv_event_cb_t swipe_up_cb, lv_event_cb_t reset_cb);
-    void update(float grams, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int battery_percent, bool battery_valid, bool charging, bool prebrew_pending = false, bool ready = false);
+    void create(const BrewRecipe& recipe);
+    void update(float grams, float flow_gps, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int battery_percent, bool battery_valid, bool charging, bool prebrew_pending = false, bool ready = false);
 private:
     lv_obj_t* screen_obj = nullptr;
     lv_obj_t* card = nullptr;
@@ -18,17 +18,11 @@ private:
     lv_obj_t* timer_chars[7] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* hold_label = nullptr;
     lv_obj_t* progress_label = nullptr;
-    lv_obj_t* tare_button = nullptr;
-    lv_obj_t* start_button = nullptr;
-    lv_obj_t* start_button_label = nullptr;
+    lv_obj_t* flow_title_label = nullptr;
+    lv_obj_t* flow_value_label = nullptr;
+    lv_obj_t* flow_bar = nullptr;
+    lv_obj_t* flow_scale_label = nullptr;
     lv_obj_t* ready_label = nullptr;
-    lv_event_cb_t start_button_cb = nullptr;
-    lv_event_cb_t reset_button_cb = nullptr;
-    uint32_t start_button_pressed_ms = 0;
-    bool start_button_long_reset_sent = false;
-    static void start_button_event_router(lv_event_t* e);
-    void handle_start_button_event(lv_event_t* e);
-    bool last_running = false;
     void set_timer_text(const char* text);
     void set_state_colors(bool running, float grams, const BrewRecipe& recipe, const BrewStageStatus* stage = nullptr);
 };

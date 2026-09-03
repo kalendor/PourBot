@@ -1,49 +1,13 @@
 #include "home_screen.h"
 #include "amoled_theme.h"
 #include <Arduino.h>
+#include <math.h>
 
 static const lv_color_t COLOR_BG       = lv_color_hex(0x020617);
 static const lv_color_t COLOR_CARD     = lv_color_hex(0x05070B);
 static const lv_color_t COLOR_BORDER   = lv_color_hex(0x1F2937);
 static const lv_color_t COLOR_TEXT     = lv_color_hex(0xF8FAFC);
-static const lv_color_t COLOR_ORANGE_PRESSED = lv_color_hex(0x78350F);
 static const lv_color_t COLOR_GREEN    = lv_color_hex(0x4ADE80);
-static constexpr uint32_t START_BUTTON_HOLD_MS = 1000UL;
-
-void HomeScreen::start_button_event_router(lv_event_t* e) {
-    HomeScreen* self = static_cast<HomeScreen*>(lv_event_get_user_data(e));
-    if (self) self->handle_start_button_event(e);
-}
-
-void HomeScreen::handle_start_button_event(lv_event_t* e) {
-    lv_event_code_t code = lv_event_get_code(e);
-    uint32_t now = millis();
-
-    if (code == LV_EVENT_PRESSED) {
-        start_button_pressed_ms = now;
-        start_button_long_reset_sent = false;
-        return;
-    }
-
-    if (code == LV_EVENT_PRESSING) {
-        if (!start_button_long_reset_sent && start_button_pressed_ms > 0 && (now - start_button_pressed_ms) >= START_BUTTON_HOLD_MS) {
-            start_button_long_reset_sent = true;
-            if (reset_button_cb) reset_button_cb(nullptr);
-        }
-        return;
-    }
-
-    if (code == LV_EVENT_CLICKED) {
-        if (!start_button_long_reset_sent && start_button_cb) {
-            start_button_cb(nullptr);
-        }
-        return;
-    }
-
-    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        start_button_pressed_ms = 0;
-    }
-}
 
 void HomeScreen::set_timer_text(const char* text) {
     // Fixed-position timer characters prevent visual shifting when proportional
@@ -65,8 +29,6 @@ void HomeScreen::set_state_colors(bool running, float grams, const BrewRecipe& r
     const lv_color_t fill_accent = lv_color_hex((stage && stage->holding) ? theme.hold_fill : theme.pour_fill);
     if (progress_panel) lv_obj_set_style_bg_color(progress_panel, fill_accent, LV_PART_INDICATOR);
     if (screen_obj) lv_obj_set_style_bg_color(screen_obj, lv_color_hex(theme.background), 0);
-    if (tare_button) lv_obj_set_style_bg_color(tare_button, lv_color_hex(theme.button), 0);
-    if (start_button) lv_obj_set_style_bg_color(start_button, lv_color_hex(theme.button), 0);
     if (weight_label) {
         lv_obj_set_style_text_color(weight_label, lv_color_hex(theme.weight_text), 0);
         lv_obj_set_style_text_outline_stroke_color(weight_label, lv_color_hex(theme.weight_text), 0);
@@ -79,18 +41,14 @@ void HomeScreen::set_state_colors(bool running, float grams, const BrewRecipe& r
     }
 }
 
-void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_event_cb_t start_cb, lv_event_cb_t, lv_event_cb_t reset_cb) {
-    start_button_cb = start_cb;
-    reset_button_cb = reset_cb;
-    start_button_pressed_ms = 0;
-    start_button_long_reset_sent = false;
+void HomeScreen::create(const BrewRecipe& recipe) {
     lv_obj_t* scr = lv_screen_active();
     screen_obj = scr;
     lv_obj_clean(scr);
     lv_obj_set_style_bg_color(scr, COLOR_BG, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    // Home display plus a direct on-screen TARE control.
+    // Hardware touch sensors provide brew controls; the AMOLED is display-only.
     lv_obj_clear_flag(scr, LV_OBJ_FLAG_CLICKABLE);
 
     card = lv_obj_create(scr);
@@ -206,45 +164,43 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     lv_obj_align(hold_label, LV_ALIGN_TOP_MID, 0, 277);
     lv_obj_add_flag(hold_label, LV_OBJ_FLAG_HIDDEN);
 
-    tare_button = lv_button_create(card);
-    lv_obj_set_size(tare_button, 125, 86);
-    lv_obj_align(tare_button, LV_ALIGN_BOTTOM_LEFT, 8, -10);
-    lv_obj_set_style_bg_color(tare_button, lv_color_hex(amoled_theme.colors().button), 0);
-    lv_obj_set_style_bg_opa(tare_button, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(tare_button, 0, 0);
-    lv_obj_set_style_radius(tare_button, 29, 0);
-    lv_obj_set_style_bg_color(tare_button, COLOR_ORANGE_PRESSED, LV_STATE_PRESSED);
-    lv_obj_set_style_shadow_width(tare_button, 0, 0);
-    lv_obj_clear_flag(tare_button, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(tare_button, tare_cb, LV_EVENT_CLICKED, nullptr);
+    flow_title_label = lv_label_create(card);
+    lv_label_set_text(flow_title_label, "FLOW RATE");
+    lv_obj_set_width(flow_title_label, 238);
+    lv_obj_set_style_text_align(flow_title_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(flow_title_label, lv_color_hex(0x94A3B8), 0);
+    lv_obj_set_style_text_font(flow_title_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_letter_space(flow_title_label, 2, 0);
+    lv_obj_align(flow_title_label, LV_ALIGN_TOP_MID, 0, 315);
 
-    lv_obj_t* tare_text = lv_label_create(tare_button);
-    lv_label_set_text(tare_text, "TARE");
-    lv_obj_set_style_text_color(tare_text, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(tare_text, &lv_font_montserrat_24, 0);
-    lv_obj_center(tare_text);
+    flow_value_label = lv_label_create(card);
+    lv_label_set_text(flow_value_label, "0.0 g/s");
+    lv_obj_set_width(flow_value_label, 238);
+    lv_obj_set_style_text_align(flow_value_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(flow_value_label, COLOR_TEXT, 0);
+    lv_obj_set_style_text_font(flow_value_label, &lv_font_montserrat_32, 0);
+    lv_obj_align(flow_value_label, LV_ALIGN_TOP_MID, 0, 336);
 
-    start_button = lv_button_create(card);
-    lv_obj_set_size(start_button, 125, 86);
-    lv_obj_align(start_button, LV_ALIGN_BOTTOM_RIGHT, -8, -10);
-    lv_obj_set_style_bg_color(start_button, lv_color_hex(amoled_theme.colors().button), 0);
-    lv_obj_set_style_bg_opa(start_button, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(start_button, 0, 0);
-    lv_obj_set_style_radius(start_button, 29, 0);
-    lv_obj_set_style_bg_color(start_button, COLOR_ORANGE_PRESSED, LV_STATE_PRESSED);
-    lv_obj_set_style_shadow_width(start_button, 0, 0);
-    lv_obj_clear_flag(start_button, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(start_button, start_button_event_router, LV_EVENT_PRESSED, this);
-    lv_obj_add_event_cb(start_button, start_button_event_router, LV_EVENT_PRESSING, this);
-    lv_obj_add_event_cb(start_button, start_button_event_router, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(start_button, start_button_event_router, LV_EVENT_RELEASED, this);
-    lv_obj_add_event_cb(start_button, start_button_event_router, LV_EVENT_PRESS_LOST, this);
+    flow_bar = lv_bar_create(card);
+    lv_obj_set_size(flow_bar, 230, 12);
+    lv_obj_align(flow_bar, LV_ALIGN_TOP_MID, 0, 377);
+    lv_bar_set_range(flow_bar, 0, 800);
+    lv_bar_set_value(flow_bar, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(flow_bar, lv_color_hex(0x1E293B), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(flow_bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(flow_bar, 6, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(flow_bar, lv_color_hex(amoled_theme.colors().pour_fill), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(flow_bar, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(flow_bar, 6, LV_PART_INDICATOR);
+    lv_obj_clear_flag(flow_bar, LV_OBJ_FLAG_CLICKABLE);
 
-    start_button_label = lv_label_create(start_button);
-    lv_label_set_text(start_button_label, "START");
-    lv_obj_set_style_text_color(start_button_label, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(start_button_label, &lv_font_montserrat_24, 0);
-    lv_obj_center(start_button_label);
+    flow_scale_label = lv_label_create(card);
+    lv_label_set_text(flow_scale_label, "SLOW            IDEAL            FAST");
+    lv_obj_set_width(flow_scale_label, 238);
+    lv_obj_set_style_text_align(flow_scale_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(flow_scale_label, lv_color_hex(0x64748B), 0);
+    lv_obj_set_style_text_font(flow_scale_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(flow_scale_label, LV_ALIGN_TOP_MID, 0, 393);
 
     progress_label = lv_label_create(card);
     lv_label_set_text(progress_label, "0.0 / 320 g");
@@ -260,7 +216,7 @@ void HomeScreen::create(const BrewRecipe& recipe, lv_event_cb_t tare_cb, lv_even
     set_state_colors(false, 0.0f, recipe);
 }
 
-void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int, bool, bool, bool prebrew_pending, bool ready) {
+void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool running, const BrewRecipe& recipe, const BrewStageStatus& stage, int, bool, bool, bool prebrew_pending, bool ready) {
     char buf[64];
 
     if (stage.holding) {
@@ -306,10 +262,19 @@ void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const Br
         else lv_obj_add_flag(ready_label, LV_OBJ_FLAG_HIDDEN);
     }
 
-    if (start_button_label) {
-        const char* control_text = running ? "PAUSE" : (elapsed_ms > 0 ? "RESUME" : "START");
-        lv_label_set_text(start_button_label, control_text);
-    }
+    const float display_flow = isfinite(flow_gps) ? max(0.0f, flow_gps) : 0.0f;
+    snprintf(buf, sizeof(buf), "%.1f g/s", display_flow);
+    if (flow_value_label) lv_label_set_text(flow_value_label, buf);
+    if (flow_bar) lv_bar_set_value(flow_bar, (int)(min(display_flow, 8.0f) * 100.0f + 0.5f), LV_ANIM_OFF);
+
+    const AmoledThemeColors& theme = amoled_theme.colors();
+    lv_color_t flow_color = lv_color_hex(0x38BDF8);
+    if (display_flow < 0.1f) flow_color = lv_color_hex(0x64748B);
+    else if (stage.holding) flow_color = lv_color_hex(theme.hold_fill);
+    else if (display_flow >= 3.0f && display_flow <= 5.0f) flow_color = lv_color_hex(theme.pour_fill);
+    else if (display_flow > 5.0f) flow_color = lv_color_hex(theme.hold_fill);
+    if (flow_value_label) lv_obj_set_style_text_color(flow_value_label, flow_color, 0);
+    if (flow_bar) lv_obj_set_style_bg_color(flow_bar, flow_color, LV_PART_INDICATOR);
     if (stage_label) {
         if (brew_active) lv_obj_clear_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
@@ -351,5 +316,4 @@ void HomeScreen::update(float grams, uint32_t elapsed_ms, bool running, const Br
     // running-state change, so a one-time cached color update can leave the fill
     // blue on the next brew cycle.
     set_state_colors(running, prebrew_pending ? 0.0f : safe_grams, recipe, &stage);
-    last_running = running;
 }

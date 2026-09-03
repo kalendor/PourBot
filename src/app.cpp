@@ -24,9 +24,6 @@ bool hardware_control_touched(uint8_t pin) {
 }
 
 static void tare_event_cb(lv_event_t*) { if (g_app) g_app->tare(); }
-static void start_event_cb(lv_event_t*) { if (g_app) g_app->toggle_brew(); }
-static void reset_and_tare_event_cb(lv_event_t*) { if (g_app) g_app->reset_brew_and_tare(); }
-static void show_settings_event_cb(lv_event_t*) { if (g_app) g_app->show_settings(); }
 static void show_cal_event_cb(lv_event_t*) { if (g_app) g_app->show_calibration(); }
 static void show_home_event_cb(lv_event_t*) { if (g_app) g_app->show_home(); }
 static void calibrate_event_cb(lv_event_t*) { if (g_app) g_app->run_calibration(); }
@@ -72,7 +69,7 @@ void App::begin() {
 
 void App::show_home() {
     screen = Screen::Home;
-    home.create(recipe, tare_event_cb, start_event_cb, show_settings_event_cb, reset_and_tare_event_cb);
+    home.create(recipe);
 }
 
 void App::show_settings() {
@@ -100,16 +97,17 @@ void App::update() {
     const bool ready_to_pour = false;
     const float ui_weight_g = current_weight_g;
 
+    const float current_flow_gps = scale.flow_gps();
     brew_engine.update(recipe, ui_weight_g, brew.elapsed_ms(), brew.is_running());
     BrewStageStatus stage_status = brew_engine.status(recipe);
-    brew_logs.update(brew.elapsed_ms(), brew.is_running(), ui_weight_g, scale.flow_gps(), recipe, stage_status);
+    brew_logs.update(brew.elapsed_ms(), brew.is_running(), ui_weight_g, current_flow_gps, recipe, stage_status);
 
     uint32_t now = millis();
     if (now - last_web_state_ms >= 50) {
         last_web_state_ms = now;
         WebDashboardState web_state;
         web_state.weight_g = ui_weight_g;
-        web_state.flow_gps = scale.flow_gps();
+        web_state.flow_gps = current_flow_gps;
         web_state.target_g = recipe.water_g;
         web_state.calibration_factor = scale.calibration_factor();
         web_state.elapsed_ms = brew.elapsed_ms();
@@ -133,7 +131,7 @@ void App::update() {
     if (now - last_ui_ms >= 100) {
         last_ui_ms = now;
         if (screen == Screen::Home) {
-            home.update(ui_weight_g, brew.elapsed_ms(), brew.is_running(), recipe, stage_status, power_status.percent, power_status.percent_valid, power_status.charge_estimate, prep_pending, ready_to_pour);
+            home.update(ui_weight_g, current_flow_gps, brew.elapsed_ms(), brew.is_running(), recipe, stage_status, power_status.percent, power_status.percent_valid, power_status.charge_estimate, prep_pending, ready_to_pour);
         } else if (screen == Screen::Calibration) {
             calibration.update(current_weight_g, known_calibration_weight_g, scale.calibration_factor(), calibration_message);
         }
