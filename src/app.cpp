@@ -16,6 +16,11 @@ namespace {
 // because zero accuracy matters more there than button latency.
 constexpr uint8_t kQuickTareSamples = 5;
 constexpr uint8_t kCalibrationTareSamples = 12;
+
+bool hardware_control_touched(uint8_t pin) {
+    const bool pin_high = digitalRead(pin) == HIGH;
+    return HW_BUTTON_ACTIVE_LOW ? !pin_high : pin_high;
+}
 }
 
 static void tare_event_cb(lv_event_t*) { if (g_app) g_app->tare(); }
@@ -45,8 +50,11 @@ void App::begin() {
     power.begin();
     start_pause_button.pin = HW_START_PAUSE_BUTTON_PIN;
     tare_sleep_button.pin = HW_TARE_SLEEP_BUTTON_PIN;
-    pinMode(start_pause_button.pin, INPUT_PULLUP);
-    pinMode(tare_sleep_button.pin, INPUT_PULLUP);
+    // The touch modules actively drive their outputs, so they do not need the
+    // pull-up used by the former switches-to-ground.
+    const uint8_t control_input_mode = HW_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT;
+    pinMode(start_pause_button.pin, control_input_mode);
+    pinMode(tare_sleep_button.pin, control_input_mode);
     const float default_calibration_factor = -7050.0f;
     const float saved_calibration_factor = settings.load_calibration_factor(default_calibration_factor);
     settings.load_recipe(recipe);
@@ -143,7 +151,7 @@ void App::tare() {
 }
 
 bool App::update_button(HardwareButton& button, uint32_t now) {
-    const bool raw_pressed = digitalRead(button.pin) == LOW;
+    const bool raw_pressed = hardware_control_touched(button.pin);
     if (raw_pressed != button.raw_pressed) {
         button.raw_pressed = raw_pressed;
         button.raw_changed_ms = now;
@@ -181,18 +189,19 @@ void App::enter_sleep() {
         Serial.println("Active brew paused for sleep");
     }
 
-    Serial.println("Entering light sleep; press TARE to wake");
+    Serial.println("Entering light sleep; touch TARE to wake");
     display.sleep();
     scale.power_down();
     Serial.flush();
 
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-    esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(HW_TARE_SLEEP_BUTTON_PIN), 0);
+    const int wake_level = HW_BUTTON_ACTIVE_LOW ? 0 : 1;
+    esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(HW_TARE_SLEEP_BUTTON_PIN), wake_level);
     esp_light_sleep_start();
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT0);
 
     // Consume the waking press so it cannot also trigger a tare or sleep.
-    while (digitalRead(HW_TARE_SLEEP_BUTTON_PIN) == LOW) delay(5);
+    while (hardware_control_touched(HW_TARE_SLEEP_BUTTON_PIN)) delay(5);
     delay(HW_BUTTON_DEBOUNCE_MS);
     tare_sleep_button.raw_pressed = false;
     tare_sleep_button.pressed = false;
