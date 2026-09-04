@@ -276,11 +276,11 @@ void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool r
     if (flow_value_label) lv_obj_set_style_text_color(flow_value_label, flow_color, 0);
     if (flow_bar) lv_obj_set_style_bg_color(flow_bar, flow_color, LV_PART_INDICATOR);
     if (stage_label) {
-        if (brew_active) lv_obj_clear_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
+        if (brew_active || prebrew_pending) lv_obj_clear_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(stage_label, LV_OBJ_FLAG_HIDDEN);
     }
     if (progress_label) {
-        if (brew_active) lv_obj_clear_flag(progress_label, LV_OBJ_FLAG_HIDDEN);
+        if (brew_active || prebrew_pending) lv_obj_clear_flag(progress_label, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(progress_label, LV_OBJ_FLAG_HIDDEN);
     }
     if (timer_box) {
@@ -292,7 +292,9 @@ void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool r
         else lv_obj_add_flag(hold_label, LV_OBJ_FLAG_HIDDEN);
     }
     if (stage_label) {
-        if (stage.recipe_mode) {
+        if (prebrew_pending) {
+            snprintf(buf, sizeof(buf), "TARING");
+        } else if (stage.recipe_mode) {
             snprintf(buf, sizeof(buf), "POUR %u OF %u",
                      (unsigned)(stage.active_index + 1), (unsigned)stage.stage_count);
         } else {
@@ -302,7 +304,7 @@ void HomeScreen::update(float grams, float flow_gps, uint32_t elapsed_ms, bool r
     }
 
     if (prebrew_pending) {
-        lv_label_set_text(progress_label, "settling / auto tare");
+        lv_label_set_text(progress_label, "settling after touch");
     } else if (ready && !running) {
         lv_label_set_text(progress_label, "ready to pour");
     } else {

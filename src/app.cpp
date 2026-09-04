@@ -47,9 +47,9 @@ void App::begin() {
     power.begin();
     start_pause_button.pin = HW_START_PAUSE_BUTTON_PIN;
     tare_sleep_button.pin = HW_TARE_SLEEP_BUTTON_PIN;
-    // The touch modules actively drive their outputs, so they do not need the
-    // pull-up used by the former switches-to-ground.
-    const uint8_t control_input_mode = HW_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT;
+    // TTP223 modules drive HIGH when touched. A pull-down gives each input a
+    // defined idle state and prevents a disconnected/noisy lead from firing.
+    const uint8_t control_input_mode = HW_BUTTON_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN;
     pinMode(start_pause_button.pin, control_input_mode);
     pinMode(tare_sleep_button.pin, control_input_mode);
     const float default_calibration_factor = -7050.0f;
@@ -93,7 +93,7 @@ void App::update() {
     const float current_weight_g = scale.grams();
     // Starting a fresh brew performs a quick tare in toggle_brew(). Resuming a
     // paused brew never tares, so the accumulated water weight is preserved.
-    const bool prep_pending = false;
+    const bool prep_pending = physical_tare_pending;
     const bool ready_to_pour = false;
     const float ui_weight_g = current_weight_g;
 
@@ -141,6 +141,8 @@ void App::update() {
 }
 
 void App::tare() {
+    // A direct/web tare supersedes any delayed physical-touch tare.
+    physical_tare_pending = false;
     const uint8_t samples = screen == Screen::Calibration
         ? kCalibrationTareSamples
         : kQuickTareSamples;
@@ -159,7 +161,10 @@ bool App::update_button(HardwareButton& button, uint32_t now) {
 
     if (raw_pressed != button.pressed && (now - button.raw_changed_ms) >= HW_BUTTON_DEBOUNCE_MS) {
         button.pressed = raw_pressed;
-        if (button.pressed) button.pressed_ms = now;
+        if (button.pressed) {
+            button.pressed_ms = now;
+            button.long_press_detected = false;
+        }
         else return true;
     }
     return false;
@@ -167,31 +172,56 @@ bool App::update_button(HardwareButton& button, uint32_t now) {
 
 void App::update_hardware_buttons() {
     const uint32_t now = millis();
+    service_pending_tare(now);
 
-    if (update_button(start_pause_button, now)) {
+    const bool start_released = update_button(start_pause_button, now);
+    if (start_pause_button.pressed && !start_pause_button.long_press_detected &&
+        (now - start_pause_button.pressed_ms) >= HW_RESET_HOLD_MS) {
+        start_pause_button.long_press_detected = true;
+        reset_brew();
+    }
+    if (start_released) {
         const uint32_t held_ms = now - start_pause_button.pressed_ms;
-        if (held_ms >= HW_RESET_HOLD_MS) reset_brew();
-        else {
+        if (!start_pause_button.long_press_detected && held_ms < HW_RESET_HOLD_MS) {
             // A fresh start performs an automatic tare. Let enclosure motion and
             // the capacitive sensor output settle after the finger is removed.
-            if (!brew.is_running() && brew.elapsed_ms() == 0) delay(HW_TOUCH_RELEASE_SETTLE_MS);
+            if (!brew.is_running() && brew.elapsed_ms() == 0) delay(HW_TOUCH_START_SETTLE_MS);
             toggle_brew();
         }
+        start_pause_button.long_press_detected = false;
     }
 
-    if (update_button(tare_sleep_button, now)) {
+    const bool tare_released = update_button(tare_sleep_button, now);
+    if (tare_sleep_button.pressed && !tare_sleep_button.long_press_detected &&
+        (now - tare_sleep_button.pressed_ms) >= HW_SLEEP_HOLD_MS) {
+        // Arm sleep during the hold, as WeighMyBru does. Actual sleep waits for
+        // release so the active-high TTP223 signal cannot wake it immediately.
+        tare_sleep_button.long_press_detected = true;
+    }
+    if (tare_released) {
         const uint32_t held_ms = now - tare_sleep_button.pressed_ms;
-        if (held_ms >= HW_SLEEP_HOLD_MS) enter_sleep();
-        else {
-            // The web tare has no physical disturbance. A touch-initiated tare
-            // needs a brief release interval before HX711 samples are captured.
-            delay(HW_TOUCH_RELEASE_SETTLE_MS);
-            tare();
-        }
+        if (tare_sleep_button.long_press_detected || held_ms >= HW_SLEEP_HOLD_MS) enter_sleep();
+        else schedule_physical_tare(now);
+        tare_sleep_button.long_press_detected = false;
     }
 }
 
+void App::schedule_physical_tare(uint32_t now) {
+    // Recognize the tap immediately but sample after the finger/enclosure has
+    // settled. This is deliberately non-blocking so the UI and web server stay
+    // responsive during the delay.
+    physical_tare_pending = true;
+    physical_tare_due_ms = now + HW_TOUCH_TARE_SETTLE_MS;
+}
+
+void App::service_pending_tare(uint32_t now) {
+    if (!physical_tare_pending || (int32_t)(now - physical_tare_due_ms) < 0) return;
+    physical_tare_pending = false;
+    tare();
+}
+
 void App::enter_sleep() {
+    physical_tare_pending = false;
     // Never let light-sleep time advance an active brew. Leave it paused after
     // wake so the user explicitly decides when pouring should resume.
     if (brew.is_running()) {
@@ -223,6 +253,9 @@ void App::enter_sleep() {
 }
 
 void App::toggle_brew() {
+    // Starting or resuming is an explicit action; never allow an earlier
+    // delayed TARE tap to fire after the brew state changes.
+    physical_tare_pending = false;
     if (brew.is_running()) {
         brew.pause();
         return;

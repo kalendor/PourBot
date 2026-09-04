@@ -35,6 +35,7 @@ private:
         bool pressed = false;
         uint32_t raw_changed_ms = 0;
         uint32_t pressed_ms = 0;
+        bool long_press_detected = false;
     };
 
     enum class Screen { Home, Settings, Calibration } screen = Screen::Home;
@@ -53,9 +54,13 @@ private:
     uint32_t last_web_state_ms = 0;
     HardwareButton start_pause_button;
     HardwareButton tare_sleep_button;
+    bool physical_tare_pending = false;
+    uint32_t physical_tare_due_ms = 0;
 
     void update_hardware_buttons();
     bool update_button(HardwareButton& button, uint32_t now);
+    void schedule_physical_tare(uint32_t now);
+    void service_pending_tare(uint32_t now);
     void enter_sleep();
 
     float known_calibration_weight_g = 100.0f;
